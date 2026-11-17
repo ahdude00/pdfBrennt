@@ -101,10 +101,10 @@ function modeButton(mode, value, label, current) {
 
 function convertHelp(kind) {
   if (kind === "udf") {
-    return `<div class="notice">${icon("info", 18)}<span><strong>UDF desteği planlanıyor.</strong> PDF çıktısını UYAP Editör ile oluşturabilirsiniz.
+    return `<div class="notice">${icon("info", 18)}<span><strong>UDF dönüşümü · Yakında</strong><br>PDF çıktısını UYAP Editör ile oluşturabilirsiniz.
       <a href="https://uyap.gov.tr/Uyap-Editor-Yardim" target="_blank" rel="noreferrer">UYAP Editör yardımı</a></span></div>`;
   }
-  return `<div class="notice">${icon("info", 18)}<span><strong>Tarayıcıda Office dönüşümü araştırılıyor.</strong>
+  return `<div class="notice">${icon("info", 18)}<span><strong>Office dönüşümü · Yakında</strong><br>
     Belgenizi Office veya ücretsiz LibreOffice ile PDF olarak dışa aktarabilirsiniz.
     <a href="https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html" target="_blank" rel="noreferrer">LibreOffice yardımı</a></span></div>`;
 }

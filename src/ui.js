@@ -26,7 +26,7 @@ const icons = {
 };
 
 export const catalog = [
-  { id: "donustur", label: "PDF’ye Dönüştür", icon: "convert", color: "teal", group: "Dönüştür", detail: "PNG ve JPEG dosyalarından PDF oluşturun.", keywords: "word powerpoint excel docx pptx xlsx jpg udf uyap converter", status: "Office ve UDF desteği planlanıyor" },
+  { id: "donustur", label: "PDF’ye Dönüştür", icon: "convert", color: "teal", group: "Dönüştür", detail: "PNG ve JPEG dosyalarından PDF oluşturun.", keywords: "word powerpoint excel docx pptx xlsx jpg udf uyap converter", status: "Office ve UDF · Yakında" },
   { id: "birlestir", label: "PDF Birleştir", icon: "merge", color: "blue", group: "Düzenle", detail: "PDF’leri sıralayın, her dosyadan istediğiniz sayfaları alın." },
   { id: "ayir", label: "PDF Ayır", icon: "split", color: "violet", group: "Düzenle", detail: "Bir PDF’yi parçalara ayırın veya seçtiğiniz sayfaları çıkarın." },
   { id: "sikistir", label: "PDF Sıkıştır", icon: "compress", color: "amber", group: "Düzenle", detail: "PDF boyutunu küçültün ve çıktı kalitesini seçin.", plan: "Çıktı kalitesini bir önizlemede değerlendirin. İndirmeden önce sayfa sayısını ve dosya boyutunu karşılaştırın." },
@@ -103,7 +103,7 @@ export function renderCatalog(state) {
     const action = tool.plan ? `<button type="button" data-planned="${tool.id}"` : `<a href="#${tool.id}"`;
     return `${action} class="tool-card">
       ${iconTile(tool)}
-      <div class="card-content"><h3>${tool.label}</h3><p>${tool.detail}</p>${tool.plan || tool.status ? `<small>${tool.status ?? "Planlanıyor"}</small>` : ""}</div>
+      <div class="card-content"><h3>${tool.label}</h3><p>${tool.detail}</p>${tool.plan || tool.status ? `<small>${tool.status ?? "Yakında"}</small>` : ""}</div>
       <span class="arrow">${icon("arrow", 16)}</span>
     </${tool.plan ? "button" : "a"}>`;
   }).join("") || '<p class="empty-catalog">Aramanıza uygun araç bulunamadı.</p>';
