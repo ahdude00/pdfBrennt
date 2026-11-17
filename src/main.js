@@ -1,0 +1,503 @@
+import { catalog, escapeHtml, home, icon, iconTile, renderCatalog } from "./ui.js";
+import { convertScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
+import { formatRange, parseRange } from "./page-ranges.js";
+import { runPdfOperation } from "./pdf-client.js";
+
+const app = document.querySelector("#app");
+const dialog = document.querySelector("#dialog");
+const state = {
+  home: { search: "", group: "Tümü" },
+  merge: { files: [], name: "birlesik-belge.pdf" },
+  split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
+  convert: { files: [], kind: "image", size: "original" },
+};
+const routes = {
+  araclar: { key: "home", screen: home },
+  birlestir: { key: "merge", screen: mergeScreen },
+  ayir: { key: "split", screen: splitScreen },
+  donustur: { key: "convert", screen: convertScreen },
+};
+let route;
+let nextFileId = 0;
+
+function activeKey() {
+  return routes[route].key;
+}
+
+function updateCatalog() {
+  app.querySelector("#tool-grid").innerHTML = renderCatalog(state.home);
+}
+
+function mergeSelection(view) {
+  return view.files.map(file => file.mode === "all" ? { pages: null } : parseRange(file.range, file.pages));
+}
+
+function splitSelection(view) {
+  if (!view.file) return { count: 0, groups: [] };
+  if (view.mode === "each") return { count: view.file.pages, groups: null };
+  const selected = parseRange(view.range, view.file.pages);
+  if (selected.error) return { error: selected.error, groups: [], count: 0 };
+  return { count: selected.pages.length, groups: view.mode === "extract" ? [selected.pages] : selected.groups };
+}
+
+function showRangeStatus(input, error, message) {
+  error.hidden = !message;
+  error.textContent = message ?? "";
+  if (message) input.setAttribute("aria-invalid", "true");
+  else input.removeAttribute("aria-invalid");
+}
+
+function updateMerge(view) {
+  const selection = mergeSelection(view);
+  let count = 0;
+  let invalid = false;
+  for (const [index, file] of view.files.entries()) {
+    const selected = selection[index];
+    const input = app.querySelector(`[data-merge-range="${file.id}"]`);
+    input.hidden = file.mode === "all";
+    showRangeStatus(input, app.querySelector(`#error-${file.id}`), selected.error);
+    count += selected.pages === null ? file.pages : selected.pages?.length ?? 0;
+    invalid ||= Boolean(selected.error);
+  }
+  app.querySelector("#merge-count").textContent = invalid || !count ? "—" : `${count} sayfa`;
+  app.querySelector("#merge-action").disabled = Boolean(view.loading || view.busy || invalid || view.files.length < 2);
+}
+
+function updateSplit(view, markError = false) {
+  const { count, groups, error } = splitSelection(view);
+  const outputs = groups === null ? count : groups.length;
+  app.querySelector("#split-pages").textContent = count ? `${count} sayfa` : "—";
+  app.querySelector("#split-count").textContent = outputs ? `${outputs} PDF` : "—";
+  app.querySelector("#split-format").textContent = outputs > 1 ? "ZIP" : outputs === 1 ? "PDF" : "—";
+  app.querySelector("#split-action").disabled = Boolean(view.busy || view.loading || !outputs);
+  const input = app.querySelector("#split-range");
+  if (!input) return;
+  showRangeStatus(input, app.querySelector("#split-error"), markError || view.range.trim() ? error : "");
+  const selected = new Set(groups?.flat());
+  for (const page of app.querySelectorAll("[data-page]")) {
+    page.setAttribute("aria-pressed", String(groups === null || selected.has(Number(page.dataset.page))));
+  }
+}
+
+function previewFor(attachment, source) {
+  attachment.preview ??= import("./pdf-preview.js")
+    .then(({ openPdfPreview }) => openPdfPreview(source))
+    .catch(() => null);
+  return attachment.preview;
+}
+
+function disposePreview(attachment) {
+  attachment?.preview?.then(preview => preview?.close()).catch(() => {});
+}
+
+async function paintThumbnails(attachment, canvases) {
+  if (!attachment || !canvases.length) return;
+  const preview = await previewFor(attachment, attachment.file);
+  if (!preview) return;
+  async function paintLane(lane) {
+    for (let index = lane; index < canvases.length; index += 2) {
+      const canvas = canvases[index];
+      if (!canvas.isConnected) return;
+      try {
+        if (await preview.renderPage(Number(canvas.dataset.thumb), canvas, { maxWidth: 65, maxHeight: 70 }) && canvas.isConnected) {
+          canvas.hidden = false;
+          canvas.nextElementSibling.hidden = true;
+        }
+      } catch {
+        // The page number remains available when rendering fails.
+      }
+    }
+  }
+  await Promise.all([paintLane(0), paintLane(1)]);
+}
+
+async function paintResult(result, canvas, message) {
+  const preview = await previewFor(result, result.blob);
+  if (!canvas.isConnected) return;
+  try {
+    const maxWidth = Math.min(canvas.parentElement.clientWidth - 28, 640);
+    const rendered = preview && await preview.renderPage(result.page, canvas, { maxWidth, maxHeight: 640 });
+    if (rendered && canvas.isConnected) {
+      canvas.style.width = `${Math.min(maxWidth, canvas.width / Math.min(window.devicePixelRatio || 1, 2))}px`;
+      message.hidden = true;
+      canvas.hidden = false;
+      return;
+    }
+  } catch {
+    // Keep the download link available if rendering fails.
+  }
+  message.textContent = "Önizleme açılamadı. Dosyayı indirebilirsiniz.";
+}
+
+function render() {
+  const { key, screen } = routes[route];
+  const view = state[key];
+  app.innerHTML = screen(view);
+  if (key === "home") updateCatalog();
+  if (key === "merge") updateMerge(view);
+  if (key === "split") {
+    updateSplit(view);
+    void paintThumbnails(view.file, [...app.querySelectorAll("[data-thumb]")]);
+  }
+  if (key === "convert" && view.kind === "image") {
+    app.querySelector("#convert-action").disabled = Boolean(view.busy || view.loading || !view.files.length);
+  }
+  const canvas = app.querySelector("#result-canvas");
+  if (canvas) void paintResult(view.result, canvas, app.querySelector("#preview-message"));
+}
+
+function navigate(focus = false) {
+  const fragment = location.hash.slice(1);
+  route = Object.hasOwn(routes, fragment) ? fragment : "araclar";
+  for (const link of document.querySelectorAll("[data-nav]")) {
+    if (link.dataset.nav === route) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  const title = catalog.find(tool => tool.id === route)?.label ?? "PDF araçları";
+  document.title = `${title} · PDF Brennt`;
+  render();
+  if (focus) {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    focusHeading(app.querySelector("h1"));
+  }
+}
+
+function focusHeading(heading) {
+  if (!heading) return;
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll: true });
+}
+
+function renderActive(key) {
+  if (activeKey() === key) render();
+}
+
+function discardResult(view) {
+  if (!view.result) return;
+  disposePreview(view.result);
+  URL.revokeObjectURL(view.result.url);
+  view.result = null;
+  if (state[activeKey()] === view) app.querySelector("#result")?.remove();
+}
+
+function fileFormat(file, key) {
+  if (key !== "convert") return /\.pdf$/i.test(file.name) || file.type === "application/pdf" ? "PDF" : "";
+  if (/\.png$/i.test(file.name) || file.type === "image/png") return "PNG";
+  if (/\.jpe?g$/i.test(file.name) || file.type === "image/jpeg") return "JPEG";
+  return "";
+}
+
+function fileSizeLabel(bytes) {
+  const megabytes = bytes / 1024 / 1024;
+  const value = megabytes >= 1 ? megabytes : Math.max(1, Math.round(bytes / 1024));
+  return `${value.toLocaleString("tr", { maximumFractionDigits: 1 })} ${megabytes >= 1 ? "MB" : "KB"}`;
+}
+
+async function loadFiles(key, files) {
+  const view = state[key];
+  if (!files.length || view.loading || view.busy || (key === "convert" && view.kind !== "image")) return;
+  view.loading = true;
+  view.problem = "";
+  renderActive(key);
+  const errors = [];
+  const sources = key === "split" ? files.slice(0, 1) : files;
+  try {
+    for (const file of sources) {
+      const format = fileFormat(file, key);
+      try {
+        if (!format) throw new Error(key === "convert" ? "PNG veya JPEG dosyası seçin." : "PDF dosyası seçin.");
+        if (!file.size) throw new Error("Dosya boş.");
+        const attachment = { id: ++nextFileId, name: file.name, file, format };
+        if (key === "convert") {
+          attachment.kind = fileSizeLabel(file.size);
+          view.files.push(attachment);
+        } else {
+          const { pageCount, hasDigitalSignature } = await runPdfOperation("inspectPdf", file);
+          Object.assign(attachment, { pages: pageCount, hasDigitalSignature, mode: "all", range: "" });
+          if (key === "merge") view.files.push(attachment);
+          else {
+            disposePreview(view.file);
+            view.file = attachment;
+            view.range = "";
+            view.thumbOffset = 0;
+          }
+        }
+        discardResult(view);
+      } catch (error) {
+        const message = error?.message || "Dosya okunamadı.";
+        errors.push(message.startsWith(`${file.name} `) ? message : `${file.name} · ${message}`);
+      }
+    }
+    if (key === "split" && files.length > 1) errors.push("Ayırma için bir PDF seçebilirsiniz.");
+    view.problem = errors.slice(0, 3).join(" ") + (errors.length > 3 ? ` Diğer ${errors.length - 3} dosya da eklenemedi.` : "");
+  } finally {
+    view.loading = false;
+    const restoreFocus = activeKey() === key && document.activeElement === document.body;
+    renderActive(key);
+    if (restoreFocus) app.querySelector("input[type=file]")?.focus({ preventScroll: true });
+  }
+}
+
+function outputName(name, extension, fallback) {
+  const safeName = name.trim().replace(/[<>:"/\\|?*\p{Cc}]/gu, "_").replace(/[. ]+$/u, "");
+  const base = safeName || fallback;
+  return base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
+}
+
+function actionRequest(key, view) {
+  if (key === "merge") {
+    const selection = mergeSelection(view);
+    if (selection.length < 2 || selection.some(part => part.error)) return null;
+    return {
+      operation: "mergePdfs",
+      args: [view.files.map(({ file }, index) => ({ file, pages: selection[index].pages }))],
+      name: outputName(view.name, "pdf", "birlesik-belge"),
+    };
+  }
+  if (key === "split") {
+    const { count, groups } = splitSelection(view);
+    if (!count) return null;
+    const pages = groups ?? Array.from({ length: count }, (_, index) => [index + 1]);
+    const name = view.file.name.replace(/\.pdf$/i, "") + "-ayrilmis";
+    return { operation: "splitPdf", args: [view.file.file, pages], name: outputName(name, pages.length > 1 ? "zip" : "pdf", "ayrilmis-belge") };
+  }
+  if (key === "convert" && view.files.length) {
+    const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
+    return { operation: "imagesToPdf", args: [view.files.map(({ file }) => file), { size: view.size }], name: outputName(name, "pdf", "gorseller") };
+  }
+  return null;
+}
+
+async function processFiles(key) {
+  const view = state[key];
+  if (view.loading || view.busy) return;
+  const request = actionRequest(key, view);
+  if (!request) return;
+  discardResult(view);
+  view.busy = true;
+  view.problem = "";
+  renderActive(key);
+  try {
+    const { bytes, ...details } = await runPdfOperation(request.operation, ...request.args);
+    const blob = new Blob([bytes], { type: details.mimeType });
+    view.result = { ...details, blob, name: request.name, url: URL.createObjectURL(blob), page: 1 };
+  } catch (error) {
+    view.problem = error.message || "Dosya hazırlanamadı. Yeniden deneyin.";
+  } finally {
+    view.busy = false;
+    renderActive(key);
+  }
+  if (activeKey() === key) {
+    if (view.result) {
+      app.querySelector("#result")?.scrollIntoView({ block: "start" });
+      focusHeading(app.querySelector("#result-title"));
+    } else {
+      const error = app.querySelector(".problem");
+      error?.scrollIntoView({ block: "nearest" });
+      focusHeading(error);
+    }
+  }
+}
+
+function moveFile(view, id, index, action) {
+  const current = view.files.findIndex(file => file.id === id);
+  if (current < 0 || index < 0 || index >= view.files.length || current === index) return;
+  const [file] = view.files.splice(current, 1);
+  view.files.splice(index, 0, file);
+  view.problem = "";
+  discardResult(view);
+  render();
+  if (action) {
+    const row = app.querySelector(`[data-file-row="${id}"]`);
+    const preferred = row.querySelector(`[data-file-action="${action}"]:not(:disabled)`);
+    (preferred ?? row.querySelector("[data-file-action]:not(:disabled)")).focus({ preventScroll: true });
+  }
+}
+
+function clearFiles(view) {
+  discardResult(view);
+  disposePreview(view.file);
+  if (view.files) view.files = [];
+  if (view.file) {
+    view.file = null;
+    view.range = "";
+    view.thumbOffset = 0;
+  }
+  view.problem = "";
+  render();
+  app.querySelector("input[type=file]")?.focus({ preventScroll: true });
+}
+
+function clickPage(view, number) {
+  const pages = splitSelection(view).groups?.[0] ?? [];
+  const index = pages.indexOf(number);
+  if (index < 0) pages.push(number);
+  else pages.splice(index, 1);
+  view.range = formatRange(pages);
+  app.querySelector("#split-range").value = view.range;
+  discardResult(view);
+  updateSplit(view);
+}
+
+const dragType = "application/x-pdfbrennt-order";
+
+app.addEventListener("input", ({ target }) => {
+  if (target.id === "search") {
+    state.home.search = target.value;
+    updateCatalog();
+  }
+  if (target.id === "merge-name") {
+    state.merge.name = target.value;
+    discardResult(state.merge);
+  }
+  if (target.dataset.mergeRange) {
+    state.merge.files.find(file => file.id === Number(target.dataset.mergeRange)).range = target.value;
+    discardResult(state.merge);
+    updateMerge(state.merge);
+  }
+  if (target.id === "split-range") {
+    state.split.range = target.value;
+    discardResult(state.split);
+    updateSplit(state.split, true);
+  }
+});
+
+app.addEventListener("change", ({ target }) => {
+  if (target.type === "file") void loadFiles(activeKey(), [...target.files]);
+  if (target.dataset.mergeMode) {
+    state.merge.files.find(file => file.id === Number(target.dataset.mergeMode)).mode = target.value;
+    discardResult(state.merge);
+    updateMerge(state.merge);
+  }
+  if (target.id === "image-size") {
+    state.convert.size = target.value;
+    discardResult(state.convert);
+  }
+});
+
+function restorePaginationFocus(button, attribute) {
+  const value = button.dataset[attribute === "thumb-step" ? "thumbStep" : "previewStep"];
+  (app.querySelector(`[data-${attribute}="${value}"]:not(:disabled)`)
+    ?? app.querySelector(`[data-${attribute}]:not(:disabled)`))?.focus({ preventScroll: true });
+}
+
+app.addEventListener("click", event => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const key = activeKey();
+  const view = state[key];
+  const { group, planned, mode, value, file, fileAction, page, thumbStep, previewStep } = button.dataset;
+  if (group) {
+    view.group = group;
+    for (const filter of app.querySelectorAll("[data-group]")) filter.setAttribute("aria-pressed", String(filter === button));
+    updateCatalog();
+  }
+  if (planned) {
+    const tool = catalog.find(item => item.id === planned);
+    document.querySelector("#dialog-content").innerHTML = `${iconTile(tool)}<h2 id="dialog-title">${escapeHtml(tool.label)}</h2><p>${escapeHtml(tool.plan)}</p>`;
+    dialog.showModal();
+  }
+  if (button.hasAttribute("data-operation")) void processFiles(key);
+  if (button.hasAttribute("data-clear")) clearFiles(view);
+  if (mode) {
+    if (mode === "split" && view.mode !== value) {
+      view.mode = value;
+      discardResult(view);
+    }
+    if (mode === "convert") view.kind = value;
+    render();
+    app.querySelector(`[data-mode="${mode}"][data-value="${value}"]`)?.focus({ preventScroll: true });
+  }
+  if (fileAction) {
+    const id = Number(file);
+    const index = view.files.findIndex(item => item.id === id);
+    if (fileAction === "remove" && index >= 0) {
+      view.files.splice(index, 1);
+      view.problem = "";
+      discardResult(view);
+      render();
+      const buttons = app.querySelectorAll('[data-file-action="remove"]');
+      (buttons[Math.min(index, buttons.length - 1)] ?? app.querySelector("input[type=file]"))?.focus({ preventScroll: true });
+    } else {
+      moveFile(view, id, index + (fileAction === "up" ? -1 : 1), fileAction);
+    }
+  }
+  if (page) clickPage(view, Number(page));
+  if (thumbStep) {
+    view.thumbOffset += Number(thumbStep) * thumbnailSize;
+    render();
+    restorePaginationFocus(button, "thumb-step");
+  }
+  if (previewStep) {
+    view.result.page += Number(previewStep);
+    render();
+    restorePaginationFocus(button, "preview-step");
+  }
+});
+
+app.addEventListener("dragstart", event => {
+  const handle = event.target.closest(".grip");
+  if (!handle) return;
+  const view = state[activeKey()];
+  if (view.loading || view.busy) {
+    event.preventDefault();
+    return;
+  }
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(dragType, handle.closest("[data-file-row]").dataset.fileRow);
+});
+
+app.addEventListener("dragover", event => {
+  const row = event.target.closest("[data-file-row]");
+  const zone = event.target.closest("[data-upload]");
+  const view = state[activeKey()];
+  if (view.loading || view.busy) return;
+  if (row && event.dataTransfer.types.includes(dragType)) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    app.querySelector(".is-target")?.classList.remove("is-target");
+    row.classList.add("is-target");
+  }
+  if (zone && event.dataTransfer.types.includes("Files")) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    zone.classList.add("over");
+  }
+});
+
+app.addEventListener("dragleave", event => {
+  const target = event.target.closest(".is-target, .over");
+  if (target && !target.contains(event.relatedTarget)) target.classList.remove("is-target", "over");
+});
+
+app.addEventListener("dragend", () => app.querySelector(".is-target")?.classList.remove("is-target"));
+
+document.addEventListener("dragover", event => {
+  if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+});
+
+document.addEventListener("drop", event => {
+  const row = event.target.closest("[data-file-row]");
+  const zone = event.target.closest("[data-upload]");
+  const key = activeKey();
+  const view = state[key];
+  if (event.dataTransfer.types.includes("Files")) {
+    event.preventDefault();
+    zone?.classList.remove("over");
+    if (zone) void loadFiles(key, [...event.dataTransfer.files]);
+  }
+  if (row && event.dataTransfer.types.includes(dragType)) {
+    event.preventDefault();
+    row.classList.remove("is-target");
+    if (!view.loading && !view.busy) {
+      moveFile(view, Number(event.dataTransfer.getData(dragType)), view.files.findIndex(file => file.id === Number(row.dataset.fileRow)));
+    }
+  }
+});
+
+document.querySelector(".brand-mark").innerHTML = icon("brand", 21);
+document.querySelector("#privacy-label").insertAdjacentHTML("afterbegin", icon("lock", 15));
+window.addEventListener("hashchange", () => {
+  if (location.hash !== "#app") navigate(true);
+});
+navigate();

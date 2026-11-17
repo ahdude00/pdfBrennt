@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f3">
+  <meta name="description" content="PDF birleştir, ayır ve görselleri PDF’ye dönüştür. Tüm işlemler tarayıcınızda çalışır.">
+  <title>PDF Brennt — PDF araçları</title>
+  <link rel="stylesheet" href="./design/styles.css">
+  <link rel="stylesheet" href="./src/app.css">
+  <script type="module" src="./src/main.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#app">İçeriğe geç</a>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="#araclar" aria-label="PDF Brennt ana sayfa">
+        <span class="brand-mark" data-icon="brand"></span>
+        <span>PDF<span class="brand-accent">Brennt</span></span>
+      </a>
+      <nav class="top-nav" aria-label="Ana menü">
+        <a href="#araclar" data-nav="araclar">Tüm araçlar</a>
+        <a href="#donustur" data-nav="donustur">Dönüştür</a>
+        <a href="#birlestir" data-nav="birlestir">Birleştir</a>
+        <a href="#ayir" data-nav="ayir">Ayır</a>
+      </nav>
+      <span class="prototype-label" id="privacy-label">Cihazda işlenir</span>
+    </div>
+  </header>
+  <main class="shell" id="app" tabindex="-1"></main>
+  <footer class="shell footer">
+    <a class="footer-brand" href="#araclar">PDF<strong>Brennt</strong></a>
+    <p>Dosyalarınız tarayıcınızda işlenir.</p>
+  </footer>
+  <dialog id="dialog" aria-labelledby="dialog-title">
+    <div id="dialog-content"></div>
+    <form method="dialog"><button class="button secondary">Kapat</button></form>
+  </dialog>
+  <noscript><p class="shell">PDF araçlarını kullanmak için JavaScript’i etkinleştirin.</p></noscript>
+</body>
+</html>

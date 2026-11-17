@@ -1,0 +1,37 @@
+#privacy-label { gap: 6px; }
+.input-area { margin: 0; padding: 0; min-width: 0; border: 0; }
+.drop-zone { position: relative; cursor: pointer; }
+.drop-zone:focus-within { outline: 3px solid #bd571f; outline-offset: 3px; }
+.drop-zone > span.icon { flex: 0 0 36px; }
+.drop-zone .drop-copy { flex: 1; min-width: 0; text-align: left; }
+.drop-zone .drop-arrow { flex: none; }
+.input-area[disabled] .drop-zone { cursor: default; opacity: .65; }
+.input-area[disabled] .grip { cursor: default; }
+.operation-status, .problem { margin-top: 12px; padding: 11px 13px; border-radius: 8px; line-height: 1.45; font-size: 13px; }
+.operation-status { color: #284e48; background: #eaf4ef; }
+.problem { color: #87381f; background: #fff0e8; overflow-wrap: anywhere; }
+.image-size { margin-top: 6px; }
+.thumb-art { width: 100%; height: 70px; display: grid; place-items: center; }
+.thumb-art canvas { display: block; max-width: 100%; max-height: 100%; box-shadow: 0 2px 5px #17243024; }
+.thumb-fallback { color: #687881; }
+.result { margin-top: 20px; scroll-margin-top: 16px; }
+.result-header, .result-heading { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.result-header { justify-content: space-between; flex-wrap: wrap; }
+.result-heading h2 { margin-bottom: 2px; }
+.result-heading p { overflow-wrap: anywhere; }
+.result .notice { margin-top: 10px; }
+.document-notice { margin-top: 12px; }
+.result .preview-stage { min-width: 0; overflow: hidden; }
+.preview-message { color: var(--muted); font-size: 14px; text-align: center; }
+#result-canvas { max-width: 100%; display: block; box-shadow: 0 4px 14px #17243019; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 9px; color: var(--muted); font-size: 13px; font-weight: 650; }
+.pagination .icon-button { border-color: var(--line); }
+.pagination span { min-width: 66px; text-align: center; }
+
+@media (max-width: 620px) {
+  .control, .hero-search input { font-size: 16px; }
+  .page-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .result { margin-top: 12px; }
+  .result-header .button { width: 100%; }
+  .drop-zone small { line-height: 1.35; display: block; }
+}
