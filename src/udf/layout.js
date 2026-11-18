@@ -39,6 +39,21 @@ function checkStyle(style) {
   }
 }
 
+// TabSet is "position:align:leader" per stop, comma separated. Alignments follow
+// javax.swing.text.TabStop: 0 left, 1 right, 2 center, 4 decimal.
+function tabStops(value) {
+  if (value == null || !value.trim()) return null;
+  const stops = value.split(",").map(entry => {
+    const [position, align = "0", leader = "0"] = entry.split(":");
+    const stop = { position: number(position, NaN, 0, 5000), align: number(align, NaN, 0, 5) };
+    if (![0, 1, 2, 4].includes(stop.align)) fail("Bu UDF desteklenmeyen bir sekme hizalaması içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+    if (number(leader, NaN, 0, 5) !== 0) fail("Bu UDF noktalı veya çizgili sekme dolgusu içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+    return stop;
+  });
+  for (let index = 1; index < stops.length; index++) if (stops[index].position < stops[index - 1].position) fail();
+  return stops;
+}
+
 function sizeOf(style, fallback) {
   const size = number(style.size, fallback, 1, 96);
   if (!Number.isInteger(size)) fail();
@@ -136,13 +151,37 @@ export async function layoutParagraph(block, width, fonts) {
     line.items.push({ ...item, advance, x: line.used });
     line.used += advance;
   }
+  const stops = tabStops(settings.TabSet);
+  // Width of the text after a tab up to the next tab, or up to a decimal point.
+  function tabPad(tokenIndex, decimal) {
+    let total = 0;
+    for (const token of tokens.slice(tokenIndex + 1)) {
+      if (token.type === "tab") break;
+      for (const item of token.items) {
+        if (decimal && item.kind === "text" && item.piece.includes(".")) return total + item.measure.width(item.piece.slice(0, item.piece.indexOf(".")));
+        total += item.width;
+      }
+    }
+    return total;
+  }
   startLine();
   for (const [tokenIndex, token] of tokens.entries()) {
     if (token.type === "tab") {
       if (align !== 0) fail("Bu UDF ortalanmış veya yaslanmış satırda sekme içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+      // Swing's ParagraphView.nextTabStop, measured from the left indent.
       const position = line.indent - left + line.used;
-      const advance = (Math.floor(position / defaultTab) + 1) * defaultTab - position;
-      if (line.used + advance > line.available) fail();
+      let advance;
+      if (!stops) advance = (Math.floor(position / defaultTab) + 1) * defaultTab - position;
+      else {
+        const stop = stops.find(entry => entry.position > position + 0.01);
+        if (!stop) advance = 5;
+        else if (stop.align === 0) advance = stop.position - position;
+        else {
+          const pad = tabPad(tokenIndex, stop.align === 4);
+          advance = Math.max(0, stop.position - (stop.align === 2 ? pad / 2 : pad) - position);
+        }
+      }
+      if (line.used + advance > line.available) fail("Bu UDF satırı aşan bir sekme içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
       add(token.items[0], advance);
       continue;
     }

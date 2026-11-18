@@ -99,6 +99,14 @@ cases["08-ustalt-kenar"] = d => d.build([
   ...Array.from({ length: 16 }, (_, index) => d.paragraph({}, [filler(4, index)])),
   d.footer({}, [d.paragraph({ Alignment: "2" }, ["Sağa yaslı altbilgi"])]),
 ]);
+cases["09-sekme"] = d => d.build([
+  d.paragraph({ TabSet: "100.0:0:0,250.0:1:0,350.0:2:0,450.0:4:0" }, ["Sol", { tab: true }, "Sola", { tab: true }, "Sağa yaslı", { tab: true }, "Ortalı", { tab: true }, "1.250,75"]),
+  d.paragraph({ TabSet: "100.0:0:0,250.0:1:0,350.0:2:0,450.0:4:0" }, ["Uzun bir başlangıç", { tab: true }, "x", { tab: true }, "12", { tab: true }, "ab", { tab: true }, "980.5"]),
+  d.paragraph({ TabSet: "150.0:0:0" }, ["DAVACI", { tab: true }, ": Örnek Kişi", { tab: true }, "son durağın ötesi"]),
+  d.paragraph({ TabSet: "150.0:0:0", LeftIndent: "20.0", FirstLineIndent: "15.0" }, ["VEKİLİ", { tab: true }, ": Av. Örnek"]),
+  d.paragraph({ TabSet: "85.05:0:0" }, ["DAVALI", { tab: true }, ": ", { text: "Deneme A.Ş.", bold: "true" }]),
+  d.paragraph({}, ["Varsayılan", { tab: true }, "sekme", { tab: true }, { tab: true }, "çift"]),
+]);
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

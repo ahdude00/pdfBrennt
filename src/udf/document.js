@@ -153,7 +153,6 @@ export function parseUdf(bytes) {
   function readParagraph(element) {
     const fields = attributes(element, ["resolver", "description", ...formatFields, ...paragraphFields]);
     if (fields.Bulleted === "true" || fields.Numbered === "true") fail("Bu UDF madde işaretli veya numaralı liste içeriyor. Listeler henüz birebir dönüştürülemiyor.");
-    if (fields.TabSet != null) fail("Bu UDF özel sekme durakları içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
     const settings = { ...defaults, ...resolve(fields.resolver), ...fields };
     const runs = [];
     for (const segment of element.children) {
