@@ -107,6 +107,15 @@ cases["09-sekme"] = d => d.build([
   d.paragraph({ TabSet: "85.05:0:0" }, ["DAVALI", { tab: true }, ": ", { text: "Deneme A.Ş.", bold: "true" }]),
   d.paragraph({}, ["Varsayılan", { tab: true }, "sekme", { tab: true }, { tab: true }, "çift"]),
 ]);
+cases["10-liste"] = d => d.build([
+  d.paragraph({}, ["Talepler:"]),
+  ...["Davanın kabulüne,", "Yargılama giderlerinin davalıya yükletilmesine,", filler(3), "Vekâlet ücretine hükmedilmesine,"].map(text => d.paragraph({ Numbered: "true", NumberType: "NUMBER_TYPE_NUMBER_DOT", ListId: "7", ListLevel: "0", Alignment: "3" }, [text])),
+  d.paragraph({}, ["Ara paragraf."]),
+  ...Array.from({ length: 11 }, (_, index) => d.paragraph({ Numbered: "true", NumberType: ["NUMBER_TYPE_CHAR_SMALL_PARANTHESE", "NUMBER_TYPE_ROMAN_BIG_DOT", "NUMBER_TYPE_NUMBER_D_PARANTHESE"][index % 3], ListId: String(20 + (index % 3)), ListLevel: "0", LeftIndent: index % 2 ? "36.0" : null }, [`Madde ${index + 1}`])),
+  ...["Birinci madde", "İkinci madde"].map(text => d.paragraph({ Bulleted: "true", BulletType: "BULLET_TYPE_ELLIPSE", ListId: "30", ListLevel: "0" }, [text])),
+  d.paragraph({ Numbered: "true", NumberType: "NUMBER_TYPE_NUMBER_DOT", ListId: "40", ListLevel: "0", size: "16" }, [{ text: "Büyük punto", size: "16" }]),
+  d.paragraph({ Bulleted: "true", BulletType: "BULLET_TYPE_ELLIPSE", ListId: "41", ListLevel: "0", size: "20", family: "Arial" }, [{ text: "Arial madde", size: "20", family: "Arial" }]),
+]);
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

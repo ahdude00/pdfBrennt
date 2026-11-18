@@ -141,6 +141,8 @@ export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily
     for (const item of items) {
       if (item.type === "line") {
         page.drawLine({ start: { x: item.x0, y: item.y }, end: { x: item.x1, y: item.y }, thickness: 1, color: rgb(...item.color.map(value => value / 255)) });
+      } else if (item.type === "ellipse") {
+        page.drawEllipse({ x: item.x, y: item.y, xScale: item.radius, yScale: item.radius, color: rgb(...item.color.map(value => value / 255)) });
       } else if (item.type === "rect") {
         page.drawRectangle({ x: item.x, y: item.y, width: item.width, height: item.height, borderWidth: 1, borderColor: rgb(0, 0, 0) });
       } else if (item.type === "image") {

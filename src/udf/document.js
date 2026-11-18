@@ -152,7 +152,7 @@ export function parseUdf(bytes) {
 
   function readParagraph(element) {
     const fields = attributes(element, ["resolver", "description", ...formatFields, ...paragraphFields]);
-    if (fields.Bulleted === "true" || fields.Numbered === "true") fail("Bu UDF madde işaretli veya numaralı liste içeriyor. Listeler henüz birebir dönüştürülemiyor.");
+    const list = readList(fields);
     const settings = { ...defaults, ...resolve(fields.resolver), ...fields };
     const runs = [];
     for (const segment of element.children) {
@@ -181,7 +181,26 @@ export function parseUdf(bytes) {
     }
     const paragraphText = runs.filter(run => run.type === "text").map(run => run.text).join("").replace(/[\r\n]+$/u, "");
     if (/[\u0000-\u0008\u000a-\u001f‪-‮⁦-⁩]/u.test(paragraphText)) fail();
-    return { type: "paragraph", settings, runs };
+    return { type: "paragraph", settings, runs, list };
+  }
+
+  // Numbered paragraphs count per ListId in reading order.
+  const listCounters = new Map();
+  function readList(fields) {
+    const numbered = fields.Numbered === "true";
+    const bulleted = fields.Bulleted === "true";
+    if (!numbered && !bulleted) return null;
+    if (numbered && bulleted) fail();
+    if ((fields.ListLevel ?? "0") !== "0") fail("Bu UDF çok düzeyli liste içeriyor. Alt düzeyler henüz birebir dönüştürülemiyor.");
+    if (fields.Hanging != null && Number(fields.Hanging) !== 0) fail("Bu UDF asılı girintili liste içeriyor. Bu liste henüz birebir dönüştürülemiyor.");
+    if (bulleted) {
+      if ((fields.BulletType ?? "BULLET_TYPE_ELLIPSE") !== "BULLET_TYPE_ELLIPSE") fail("Bu UDF yuvarlak dışında bir madde işareti içeriyor. Bu işaret henüz birebir dönüştürülemiyor.");
+      return { kind: "bullet" };
+    }
+    const id = fields.ListId ?? "";
+    const value = (listCounters.get(id) ?? 0) + 1;
+    listCounters.set(id, value);
+    return { kind: "number", type: fields.NumberType ?? "NUMBER_TYPE_NUMBER_DOT", value };
   }
 
   const sectionBlocks = { header: null, footer: null };

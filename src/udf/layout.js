@@ -2,6 +2,7 @@
 // items per page. Coordinates are PDF points with the origin at the bottom left.
 // Every rule here was measured against UYAP Editör exports; see tools/udf.
 import { fail, number } from "./document.js";
+import { bulletGeometry, markerBaseline, numberLabel } from "./lists.js";
 
 const a4 = [595.28, 841.89];
 const defaultTab = 72;
@@ -226,7 +227,22 @@ export async function layoutParagraph(block, width, fonts) {
     }
     finishRow(current, spacing);
   }
-  return { above, below, lines };
+  let marker = null;
+  if (block.list) {
+    if (firstIndent || spacing || ![0, 3].includes(align)) {
+      fail("Bu UDF girintili, satır aralıklı veya ortalanmış liste içeriyor. Bu liste henüz birebir dönüştürülemiyor.");
+    }
+    // The marker hangs in front of the left indent. Its vertical place depends only on the size.
+    if (block.list.kind === "number") {
+      const text = numberLabel(block.list.type, block.list.value);
+      const item = await textItem(settings, text, fonts, baseSize);
+      marker = { kind: "text", item, x: Math.floor(left - 5 - Math.max(12, item.width)), baseline: markerBaseline(baseSize) };
+    } else {
+      const { top, diameter } = bulletGeometry(baseSize);
+      marker = { kind: "bullet", x: left - 15, top, diameter, color: color(settings.foreground) };
+    }
+  }
+  return { above, below, lines, marker };
 }
 
 function columnWidths(spans, total) {
@@ -264,6 +280,16 @@ export async function layoutDocument(model, fonts) {
     }
   }
 
+  function drawMarker(marker, x0, top, target) {
+    if (marker.kind === "text") {
+      const { item } = marker;
+      target.push({ type: "text", text: item.piece, font: item.font, size: item.size, color: item.color, x: x0 + marker.x, y: top - marker.baseline });
+    } else {
+      const radius = marker.diameter / 2;
+      target.push({ type: "ellipse", x: x0 + marker.x + radius, y: top - marker.top - radius, radius, color: marker.color });
+    }
+  }
+
   async function layoutBlocks(blocks, width) {
     const laid = [];
     let height = 0;
@@ -290,7 +316,10 @@ export async function layoutDocument(model, fonts) {
           below: index === paragraph.lines.length - 1 ? paragraph.below : 0,
           first: index === 0,
           height: line.height,
-          draw: (target, top) => placeLine(line, geometry.originX, top, target),
+          draw(target, top) {
+            placeLine(line, geometry.originX, top, target);
+            if (index === 0 && paragraph.marker) drawMarker(paragraph.marker, geometry.originX, top, target);
+          },
         }));
         continue;
       }
@@ -311,8 +340,9 @@ export async function layoutDocument(model, fonts) {
               let cellTop = top;
               for (const paragraph of content.laid) {
                 cellTop -= paragraph.above;
-                for (const line of paragraph.lines) {
+                for (const [lineIndex, line] of paragraph.lines.entries()) {
                   placeLine(line, x, cellTop, target);
+                  if (lineIndex === 0 && paragraph.marker) drawMarker(paragraph.marker, x, cellTop, target);
                   cellTop -= line.height;
                 }
                 cellTop -= paragraph.below;

@@ -77,6 +77,11 @@ export async function compareCase(name) {
     problems.push(...compareList(`${prefix} strokes`, boxes(page.strokes), boxes(other.strokes),
       (a, b) => near(a.x, b.x) && near(a.y, b.y) && near(a.x1, b.x1) && near(a.y1, b.y1),
       box => `${f(box.x)},${f(box.y)}–${f(box.x1)},${f(box.y1)}`));
+    // Filled shapes (list bullets). Curves may be flattened differently, so allow 0.1 pt.
+    const painted = list => boxes(list.filter(box => box.color !== "255,255,255"));
+    problems.push(...compareList(`${prefix} fills`, painted(page.fills), painted(other.fills),
+      (a, b) => [a.x - b.x, a.y - b.y, a.x1 - b.x1, a.y1 - b.y1].every(value => Math.abs(value) <= 0.1),
+      box => `${f(box.x)},${f(box.y)}–${f(box.x1)},${f(box.y1)}`));
   }
   return problems;
 }
