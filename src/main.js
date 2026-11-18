@@ -9,7 +9,7 @@ const state = {
   home: { search: "", group: "Tümü" },
   merge: { files: [], name: "birlesik-belge.pdf" },
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
-  convert: { files: [], kind: "image", size: "original" },
+  convert: { files: [], kind: "image", size: "original", udf: { file: null } },
 };
 const routes = {
   araclar: { key: "home", screen: home },
@@ -22,6 +22,10 @@ let nextFileId = 0;
 
 function activeKey() {
   return routes[route].key;
+}
+
+function toolView(key) {
+  return key === "convert" && state.convert.kind === "udf" ? state.convert.udf : state[key];
 }
 
 function updateCatalog() {
@@ -142,8 +146,11 @@ function render() {
   if (key === "convert" && view.kind === "image") {
     app.querySelector("#convert-action").disabled = Boolean(view.busy || view.loading || !view.files.length);
   }
+  if (key === "convert" && view.kind === "udf") {
+    app.querySelector("#udf-action").disabled = Boolean(view.udf.busy || view.udf.loading || !view.udf.file);
+  }
   const canvas = app.querySelector("#result-canvas");
-  if (canvas) void paintResult(view.result, canvas, app.querySelector("#preview-message"));
+  if (canvas) void paintResult(toolView(key).result, canvas, app.querySelector("#preview-message"));
 }
 
 function navigate(focus = false) {
@@ -177,10 +184,11 @@ function discardResult(view) {
   disposePreview(view.result);
   URL.revokeObjectURL(view.result.url);
   view.result = null;
-  if (state[activeKey()] === view) app.querySelector("#result")?.remove();
+  if (toolView(activeKey()) === view) app.querySelector("#result")?.remove();
 }
 
 function fileFormat(file, key) {
+  if (key === "udf") return /\.udf$/i.test(file.name) ? "UDF" : "";
   if (key !== "convert") return /\.pdf$/i.test(file.name) || file.type === "application/pdf" ? "PDF" : "";
   if (/\.png$/i.test(file.name) || file.type === "image/png") return "PNG";
   if (/\.jpe?g$/i.test(file.name) || file.type === "image/jpeg") return "JPEG";
@@ -194,23 +202,29 @@ function fileSizeLabel(bytes) {
 }
 
 async function loadFiles(key, files) {
-  const view = state[key];
-  if (!files.length || view.loading || view.busy || (key === "convert" && view.kind !== "image")) return;
+  const view = toolView(key);
+  if (!files.length || view.loading || view.busy || (key === "convert" && state.convert.kind === "office")) return;
+  const udf = view === state.convert.udf;
+  const single = udf || key === "split";
   view.loading = true;
   view.problem = "";
   renderActive(key);
   const errors = [];
-  const sources = key === "split" ? files.slice(0, 1) : files;
+  const sources = single ? files.slice(0, 1) : files;
   try {
     for (const file of sources) {
-      const format = fileFormat(file, key);
+      const format = fileFormat(file, udf ? "udf" : key);
       try {
-        if (!format) throw new Error(key === "convert" ? "PNG veya JPEG dosyası seçin." : "PDF dosyası seçin.");
+        if (!format) {
+          const supported = udf ? "UDF" : key === "convert" ? "PNG veya JPEG" : "PDF";
+          throw new Error(`${supported} dosyası seçin.`);
+        }
         if (!file.size) throw new Error("Dosya boş.");
         const attachment = { id: ++nextFileId, name: file.name, file, format };
         if (key === "convert") {
           attachment.kind = fileSizeLabel(file.size);
-          view.files.push(attachment);
+          if (udf) view.file = attachment;
+          else view.files.push(attachment);
         } else {
           const { pageCount, hasDigitalSignature } = await runPdfOperation("inspectPdf", file);
           Object.assign(attachment, { pages: pageCount, hasDigitalSignature, mode: "all", range: "" });
@@ -228,7 +242,7 @@ async function loadFiles(key, files) {
         errors.push(message.startsWith(`${file.name} `) ? message : `${file.name} · ${message}`);
       }
     }
-    if (key === "split" && files.length > 1) errors.push("Ayırma için bir PDF seçebilirsiniz.");
+    if (single && files.length > 1) errors.push(udf ? "Bir UDF dosyası seçebilirsiniz." : "Ayırma için bir PDF seçebilirsiniz.");
     view.problem = errors.slice(0, 3).join(" ") + (errors.length > 3 ? ` Diğer ${errors.length - 3} dosya da eklenemedi.` : "");
   } finally {
     view.loading = false;
@@ -261,6 +275,11 @@ function actionRequest(key, view) {
     const name = view.file.name.replace(/\.pdf$/i, "") + "-ayrilmis";
     return { operation: "splitPdf", args: [view.file.file, pages], name: outputName(name, pages.length > 1 ? "zip" : "pdf", "ayrilmis-belge") };
   }
+  if (view === state.convert.udf) {
+    if (!view.file) return null;
+    const name = view.file.name.replace(/\.udf$/i, "");
+    return { operation: "udfToPdf", args: [view.file.file], name: outputName(name, "pdf", "uyap-belgesi") };
+  }
   if (key === "convert" && view.files.length) {
     const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
     return { operation: "imagesToPdf", args: [view.files.map(({ file }) => file), { size: view.size }], name: outputName(name, "pdf", "gorseller") };
@@ -269,7 +288,7 @@ function actionRequest(key, view) {
 }
 
 async function processFiles(key) {
-  const view = state[key];
+  const view = toolView(key);
   if (view.loading || view.busy) return;
   const request = actionRequest(key, view);
   if (!request) return;
@@ -278,7 +297,10 @@ async function processFiles(key) {
   view.problem = "";
   renderActive(key);
   try {
-    const { bytes, ...details } = await runPdfOperation(request.operation, ...request.args);
+    const result = request.operation === "udfToPdf"
+      ? await import("./udf-engine.js").then(({ udfToPdf }) => udfToPdf(...request.args))
+      : await runPdfOperation(request.operation, ...request.args);
+    const { bytes, ...details } = result;
     const blob = new Blob([bytes], { type: details.mimeType });
     view.result = { ...details, blob, name: request.name, url: URL.createObjectURL(blob), page: 1 };
   } catch (error) {
@@ -320,8 +342,10 @@ function clearFiles(view) {
   if (view.files) view.files = [];
   if (view.file) {
     view.file = null;
-    view.range = "";
-    view.thumbOffset = 0;
+    if (view === state.split) {
+      view.range = "";
+      view.thumbOffset = 0;
+    }
   }
   view.problem = "";
   render();
@@ -385,7 +409,7 @@ app.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button) return;
   const key = activeKey();
-  const view = state[key];
+  const view = toolView(key);
   const { group, planned, mode, value, file, fileAction, page, thumbStep, previewStep } = button.dataset;
   if (group) {
     view.group = group;
@@ -404,7 +428,7 @@ app.addEventListener("click", event => {
       view.mode = value;
       discardResult(view);
     }
-    if (mode === "convert") view.kind = value;
+    if (mode === "convert") state.convert.kind = value;
     render();
     app.querySelector(`[data-mode="${mode}"][data-value="${value}"]`)?.focus({ preventScroll: true });
   }
@@ -438,7 +462,7 @@ app.addEventListener("click", event => {
 app.addEventListener("dragstart", event => {
   const handle = event.target.closest(".grip");
   if (!handle) return;
-  const view = state[activeKey()];
+  const view = toolView(activeKey());
   if (view.loading || view.busy) {
     event.preventDefault();
     return;
@@ -450,7 +474,7 @@ app.addEventListener("dragstart", event => {
 app.addEventListener("dragover", event => {
   const row = event.target.closest("[data-file-row]");
   const zone = event.target.closest("[data-upload]");
-  const view = state[activeKey()];
+  const view = toolView(activeKey());
   if (view.loading || view.busy) return;
   if (row && event.dataTransfer.types.includes(dragType)) {
     event.preventDefault();
@@ -480,7 +504,7 @@ document.addEventListener("drop", event => {
   const row = event.target.closest("[data-file-row]");
   const zone = event.target.closest("[data-upload]");
   const key = activeKey();
-  const view = state[key];
+  const view = toolView(key);
   if (event.dataTransfer.types.includes("Files")) {
     event.preventDefault();
     zone?.classList.remove("over");

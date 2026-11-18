@@ -99,11 +99,7 @@ function modeButton(mode, value, label, current) {
   return `<button type="button" class="mode-button" data-mode="${mode}" data-value="${value}" aria-pressed="${current === value}">${label}</button>`;
 }
 
-function convertHelp(kind) {
-  if (kind === "udf") {
-    return `<div class="notice">${icon("info", 18)}<span><strong>UDF dönüşümü · Yakında</strong><br>PDF çıktısını UYAP Editör ile oluşturabilirsiniz.
-      <a href="https://uyap.gov.tr/Uyap-Editor-Yardim" target="_blank" rel="noreferrer">UYAP Editör yardımı</a></span></div>`;
-  }
+function convertHelp() {
   return `<div class="notice">${icon("info", 18)}<span><strong>Office dönüşümü · Yakında</strong><br>
     Belgenizi Office veya ücretsiz LibreOffice ile PDF olarak dışa aktarabilirsiniz.
     <a href="https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html" target="_blank" rel="noreferrer">LibreOffice yardımı</a></span></div>`;
@@ -111,23 +107,33 @@ function convertHelp(kind) {
 
 export function convertScreen(view) {
   const image = view.kind === "image";
+  const udf = view.kind === "udf";
+  const active = udf ? view.udf : view;
   const source = `<div class="mode-options" role="group" aria-label="Dosya türü">
       ${modeButton("convert", "image", "PNG / JPEG", view.kind)}
       ${modeButton("convert", "office", "Word / Excel / PowerPoint", view.kind)}
-      ${modeButton("convert", "udf", "UYAP (UDF)", view.kind)}
+      ${modeButton("convert", "udf", "UYAP (UDF) · Beta", view.kind)}
     </div>
     ${image ? `
       ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
-      ` : convertHelp(view.kind)}`;
-  return `${toolHeader("donustur", "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur.")}
+      ` : udf ? `
+        <p class="notice udf-notice">${icon("info", 18)}<span>Beta sürüm, Times New Roman ile hazırlanmış temel, imzasız A4 dikey belgeleri destekler. Tablolu, görselli veya doğrulama kodlu belgeler için <a href="https://uyap.gov.tr/Uyap-Editor-Yardim" target="_blank" rel="noreferrer">UYAP Editör’ü kullanın</a>.</span></p>
+        ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "8 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
+        ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
+      ` : convertHelp()}`;
+  const description = image
+    ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur."
+    : udf ? "Bir UYAP belgesini cihazınızda PDF’ye dönüştürün." : "Office belgelerini PDF olarak dışa aktarma seçeneklerini görün.";
+  return `${toolHeader("donustur", description)}
     <div class="workspace">
       <section class="panel" aria-labelledby="source-heading">
         <div class="panel-title">
-          <div><h2 id="source-heading">Kaynak dosyalar</h2><p class="panel-lead">Dosya türünü seçin. Birden çok görseli sıralayabilirsiniz.</p></div>
+          <div><h2 id="source-heading">Kaynak dosyalar</h2><p class="panel-lead">${image ? "Dosya türünü seçin. Birden çok görseli sıralayabilirsiniz." : "Dosya türünü seçin."}</p></div>
           ${image && view.files.length ? `<button type="button" class="text-button" data-clear ${view.loading || view.busy ? "disabled" : ""}>Tümünü kaldır</button>` : ""}
+          ${udf && view.udf.file ? `<button type="button" class="text-button" data-clear ${active.loading || active.busy ? "disabled" : ""}>Dosyayı kaldır</button>` : ""}
         </div>
-        ${progressOrFiles(view, source)}
+        ${progressOrFiles(active, source)}
       </section>
       ${image ? `<aside class="panel summary" aria-labelledby="preview-heading">
         <h2 id="preview-heading">PDF ayarları</h2>
@@ -140,8 +146,13 @@ export function convertScreen(view) {
         <p class="context-note">${icon("info", 15)} Görselin oranı korunur. Boyut seçimi piksel sayısını değiştirmez.</p>
         ${actionButton("convert", "PDF’ye dönüştür", view)}
         ${privacyNote()}
+      </aside>` : udf ? `<aside class="panel summary" aria-labelledby="preview-heading">
+        <h2 id="preview-heading">UDF’den PDF’ye</h2>
+        <p class="panel-lead">Çıktıyı indirmeden önce inceleyebilirsiniz.</p>
+        ${actionButton("udf", "PDF’ye dönüştür", active)}
+        ${privacyNote()}
       </aside>` : ""}
-    </div>${image ? resultPanel(view.result) : ""}`;
+    </div>${image || udf ? resultPanel(active.result) : ""}`;
 }
 
 const thumbnailSize = 8;

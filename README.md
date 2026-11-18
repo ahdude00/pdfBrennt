@@ -2,14 +2,17 @@
 
 Telefon ve bilgisayarda çalışan Türkçe PDF araçları. Dosya işlemleri tarayıcıda yapılır.
 
-## İlk sürüm
+## Araçlar
 
 - **PDF Birleştir** birden fazla PDF’yi sürükleyerek veya yön düğmeleriyle sıralar. Her dosyada tüm sayfaları ya da `2-4, 7` gibi aralıkları seçebilirsiniz.
 - **PDF Ayır** sayfa aralığı veya küçük resimlerden seçim yapar. Seçili sayfalar tek PDF olarak çıkarılabilir. Ayrı PDF’ler üreten modlarda birden fazla çıktı ZIP olarak indirilir.
 - **PDF’ye Dönüştür** PNG ve JPEG dosyalarını, seçilen sırayla ve en-boy oranını koruyarak görsel boyutunda veya A4 sayfalara yerleştirir.
+- **UYAP (UDF) · Beta** Times New Roman ile hazırlanmış temel, imzasız A4 dikey UDF 1.8 belgelerini aranabilir PDF’ye dönüştürür. Metin biçimleri ve belgeye eklenmiş sayfa sonları desteklenir. Çıktıda metrik uyumlu Liberation Serif kullanılır.
 - **Önizleme ve indirme** oluşan PDF’nin sayfalarını tarayıcıda gösterir.
 
-Office ve UDF dönüşümleri geliştirme planında yer alır. PDF dışa aktarıp uygulamada düzenlemek için [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) veya [UYAP Editör](https://uyap.gov.tr/Uyap-Editor-Yardim) kullanılabilir.
+Office dönüşümü geliştirme planında yer alır. Belgeleri [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) ile PDF olarak dışa aktarabilirsiniz. Yatay, tablolu, görselli, imzalı veya doğrulama kodlu UDF’ler için [UYAP Editör](https://uyap.gov.tr/Uyap-Editor-Yardim) kullanılabilir.
+
+UDF metin yerleşimi egPDF’den uyarlanmıştır. [egPDF lisansı](public/licenses/egpdf-MIT.txt) · [Liberation Serif lisansı](public/licenses/liberation-OFL.txt)
 
 Parola korumalı PDF’lerin kilidini önce kaynak uygulamada açın. Birleştirme ve ayırma sayfa içeriğini kopyalar. Etkileşimli formlar ve yer imleri çıktı dosyasına aktarılmayabilir. Dijital imzaları doğrulamak için özgün belgeyi saklayın. 16 bit PNG renk derinliği PDF’de 8 bite düşer. Animasyonlu PNG’nin varsayılan karesi PDF’ye eklenir. Uygulama bu durumları dönüşüm sonucunda bildirir.
 

@@ -7,7 +7,7 @@ Telefon ve bilgisayarda tarayıcıdan açılan bir PDF araç kutusu. Ana sayfada
 | Ekran | Akış |
 | --- | --- |
 | **Ana sayfa** | En üstte PDF Dönüştür, PDF Birleştir ve PDF Ayır. Devamında sıkıştırma, sayfa düzenleme, PDF’den görsel alma, filigran, sayfa numaralandırma, OCR ve şifreleme araçları. Masaüstünde kart ızgarası, telefonda dokunmaya uygun kartlar. |
-| **PDF Dönüştür** | PNG veya JPEG seç veya sürükleyip bırak → sayfa boyutunu belirle → PDF’yi önizle ve indir. Office ve UDF sekmeleri, tarayıcı dönüşümü doğrulanana kadar yerel PDF dışa aktarma seçeneklerini gösterir. |
+| **PDF Dönüştür** | PNG veya JPEG seç → sayfa boyutunu belirle → PDF’yi önizle ve indir. UDF beta sekmesinde temel bir UYAP belgesi seç → PDF’yi önizle ve indir. Office sekmesi yerel PDF dışa aktarma seçeneğini gösterir. |
 | **PDF Birleştir** | En az iki PDF ekle → dosyaları sürükleyerek veya yukarı/aşağı düğmeleriyle sırala → her satırda **Tüm sayfalar** ya da **Sayfa aralığı** seç → toplam sayfa sayısını gör → birleştir. Örneğin `1-3, 7` dört sayfayı alır. Geçersiz aralık ilgili satırda gösterilir. |
 | **PDF Ayır** | Bir PDF aç → küçük resimlerden veya aralık alanından sayfaları seç → seçilenleri tek PDF’ye al, her aralıktan ayrı bir PDF üret veya her sayfayı ayrı çıkar. Birden fazla çıktı ZIP ile birlikte indirilebilir. |
 
@@ -35,7 +35,11 @@ Referanslar sentetik veya kullanımı yetkilendirilmiş belgelerden hazırlanır
 
 ### UDF (UYAP)
 
-UYAP Editör’ün dışa aktardığı PDF karşılaştırma için referans alınır. egPDF’nin UDF dönüştürücüsü, tarayıcıda çalışan bir adaydır. Özellik açılmadan önce gerçekçi UDF örneklerinde paragraf ve tablo kırımları, görseller, sayfa numaraları, altbilgiler ve doğrulama kodu karşılaştırılır. Bu doğrulama tamamlanana kadar tasarım UDF’yi **Planlanıyor** olarak gösterir ve resmî Editör yardımına yönlendirir. Elektronik imza doğrulaması için özgün UDF dosyası kullanılır. Düzenlenen veya birleştirilen PDF’lerde mevcut dijital imza geçerliliği etkilenebileceğinden, imza algılandığında işlem öncesinde kullanıcı bilgilendirilir. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim) · [egPDF UDF desteği](https://github.com/acc-studio/egpdf#uyap-documents-udf)
+Beta, UYAP Editör 5.4.20 çıktısıyla karşılaştırılan temel A4 dikey UDF 1.8 belgelerini kapsar. Yatay sayfa, tablo, görsel, üstbilgi, altbilgi, doğrulama kodu ve imza içeren belgeler için uygulama resmî Editör’e yönlendirir. Tarayıcı çıktısında metrik uyumlu Liberation Serif kullanılır. Elektronik imza doğrulaması için özgün UDF dosyası kullanılır. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim) · [egPDF UDF desteği](https://github.com/acc-studio/egpdf#uyap-documents-udf)
+
+### Office denemesi
+
+İki tarayıcı motoru, sentetik DOCX, PPTX ve XLSX belgelerini PDF’ye çevirdi. İki adayda da sekiz sayfanın metni, sayfa ölçüleri ve yönü masaüstü LibreOffice 26.8.3 ile eşleşti. Bir aday sekiz sayfada görüntü düzeyinde eşleşti. Diğeri yedi sayfada eşleşti ve bir Excel sayfasında küçük görüntü farkı vardı. Her iki motor da 1 GiB WebAssembly belleği ayırdı. Microsoft Office ve fiziksel telefon karşılaştırmaları bekliyor. Office sekmesi bu nedenle **Yakında** olarak gösteriliyor. [Skitionek](https://github.com/Skitionek/serverless-office-converter) · [eze-paz v0.2.0](https://github.com/eze-paz/libreoffice-wasm/releases/tag/v0.2.0)
 
 ## Uygulama sırası
 

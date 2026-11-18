@@ -21,6 +21,7 @@
 .result-heading p { overflow-wrap: anywhere; }
 .result .notice { margin-top: 10px; }
 .document-notice { margin-top: 12px; }
+.udf-notice { margin-bottom: 12px; }
 .result .preview-stage { min-width: 0; overflow: hidden; }
 .preview-message { color: var(--muted); font-size: 14px; text-align: center; }
 #result-canvas { max-width: 100%; display: block; box-shadow: 0 4px 14px #17243019; }
