@@ -17,6 +17,10 @@ export function fail(message = unsupported) {
 export const formatFields = ["family", "size", "bold", "italic", "underline", "foreground", "background", "strikethrough", "subscript", "superscript"];
 const paragraphFields = ["Alignment", "LeftIndent", "RightIndent", "FirstLineIndent", "SpaceAbove", "SpaceBelow", "LineSpacing", "TabSet",
   "Bulleted", "BulletType", "Numbered", "NumberType", "ListId", "ListLevel", "Hanging"];
+// Paragraph and list attributes that UYAP Editör sometimes leaves on character
+// elements. They have no effect there.
+const strayRunFields = [...paragraphFields, "SecListTypeLevel1", "SecListTypeLevel2", "SecListTypeLevel3", "SecListTypeLevel4",
+  "SecListTypeLevel5", "SecListTypeLevel6", "NumberSetted", "RepeatingLabel", "TabByPass"];
 const segmentTags = ["content", "space", "tab", "image"];
 
 function attributes(element, allowed, feature) {
@@ -159,7 +163,10 @@ export function parseUdf(bytes) {
       if (!segmentTags.includes(segment.name)) fail(segment.name === "field" ? "Bu UDF alan (field) içeriyor. Bu öğe henüz birebir dönüştürülemiyor." : unsupported);
       if (segment.children.length) fail();
       const isImage = segment.name === "image";
-      const values = attributes(segment, ["resolver", "description", "startOffset", "length", ...formatFields, ...(isImage ? ["imageData", "width", "height"] : [])]);
+      // Character elements may carry paragraph attributes and, on content, a stale image size. Swing ignores both.
+      const values = attributes(segment, ["resolver", "description", "startOffset", "length", ...formatFields, ...strayRunFields, ...(isImage ? ["imageData"] : []), "width", "height"]);
+      if (!isImage) { delete values.width; delete values.height; }
+      for (const field of strayRunFields) delete values[field];
       const start = number(values.startOffset, NaN, 0, text.length);
       const length = number(values.length, NaN, 0, text.length);
       if (!Number.isInteger(start) || !Number.isInteger(length) || start + length > text.length) fail();

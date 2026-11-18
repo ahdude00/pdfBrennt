@@ -116,6 +116,14 @@ cases["10-liste"] = d => d.build([
   d.paragraph({ Numbered: "true", NumberType: "NUMBER_TYPE_NUMBER_DOT", ListId: "40", ListLevel: "0", size: "16" }, [{ text: "Büyük punto", size: "16" }]),
   d.paragraph({ Bulleted: "true", BulletType: "BULLET_TYPE_ELLIPSE", ListId: "41", ListLevel: "0", size: "20", family: "Arial" }, [{ text: "Arial madde", size: "20", family: "Arial" }]),
 ]);
+cases["11-yasli-sekme"] = d => d.build([
+  d.paragraph({ Alignment: "3" }, [{ tab: true }, filler(4)]),
+  d.paragraph({ Alignment: "3" }, [{ tab: true }, { tab: true }, filler(3, 2)]),
+  d.paragraph({ Alignment: "3" }, ["Başlık", { tab: true }, filler(3, 4)]),
+  d.paragraph({ Alignment: "3" }, [filler(1, 1), { tab: true }, filler(2, 5)]),
+  d.paragraph({ Alignment: "1" }, [{ tab: true }, "Ortalı sekmeli satır"]),
+  d.paragraph({ Alignment: "2" }, ["Sağa", { tab: true }, "yaslı"]),
+]);
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

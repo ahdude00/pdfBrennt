@@ -168,7 +168,6 @@ export async function layoutParagraph(block, width, fonts) {
   startLine();
   for (const [tokenIndex, token] of tokens.entries()) {
     if (token.type === "tab") {
-      if (align !== 0) fail("Bu UDF ortalanmış veya yaslanmış satırda sekme içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
       // Swing's ParagraphView.nextTabStop, measured from the left indent.
       const position = line.indent - left + line.used;
       let advance;
@@ -210,8 +209,10 @@ export async function layoutParagraph(block, width, fonts) {
       + ending.filter(item => item.piece === "\n").reduce((total, item) => total + item.width, 0);
     const free = current.available - Math.trunc(used);
     let extra = 0;
+    const lastTab = items.findLastIndex(item => item.kind === "text" && item.piece === "	");
     if (align === 3 && index < lines.length - 1 && free > 0) {
-      const count = items.slice(0, last).filter(item => item.kind === "text" && item.piece.startsWith(" "))
+      // Only the spaces after the last tab of the line stretch.
+      const count = items.slice(lastTab + 1, last).filter(item => item.kind === "text" && item.piece.startsWith(" "))
         .reduce((total, item) => total + item.piece.length, 0);
       // UYAP spreads the unrounded free width, trailing spaces included, over the inner spaces.
       const trailing = ending.filter(item => item.piece !== "\n").reduce((total, item) => total + item.advance, 0);
@@ -221,9 +222,9 @@ export async function layoutParagraph(block, width, fonts) {
       current.x = current.indent + Math.trunc(free * (align === 1 ? 0.5 : align === 2 ? 1 : 0));
     }
     let spaces = 0;
-    for (const item of items) {
+    for (const [itemIndex, item] of items.entries()) {
       item.x = Math.round(item.x) + spaces * extra;
-      if (item.kind === "text" && item.piece.startsWith(" ")) spaces += item.piece.length;
+      if (itemIndex > lastTab && item.kind === "text" && item.piece.startsWith(" ")) spaces += item.piece.length;
     }
     finishRow(current, spacing);
   }
