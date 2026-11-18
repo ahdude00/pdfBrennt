@@ -23,6 +23,8 @@
 .document-notice { margin-top: 12px; }
 .udf-notice { margin-bottom: 12px; }
 .udf-font-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.udf-font-default { margin: 4px 0 6px; }
+.udf-font-default select { width: min(100%, 15rem); }
 .udf-font-picker { margin: 10px 0 6px; }
 .udf-font-list { display: grid; gap: 5px; padding: 0; margin: 6px 0 9px; list-style: none; }
 .udf-font-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; overflow-wrap: anywhere; font-size: 13px; }

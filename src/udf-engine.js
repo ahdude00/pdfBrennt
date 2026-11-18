@@ -5,23 +5,34 @@ import {
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { udfFontFamilyKey } from "./udf-custom-fonts.js";
+import { defaultUdfFontFamily, udfFontPresets } from "./udf-font-presets.js";
 import regularUrl from "./udf-fonts/LiberationSerif-Regular.ttf?url";
 import boldUrl from "./udf-fonts/LiberationSerif-Bold.ttf?url";
 import italicUrl from "./udf-fonts/LiberationSerif-Italic.ttf?url";
 import boldItalicUrl from "./udf-fonts/LiberationSerif-BoldItalic.ttf?url";
+import sansRegularUrl from "./udf-fonts/LiberationSans-Regular.ttf?url";
+import sansBoldUrl from "./udf-fonts/LiberationSans-Bold.ttf?url";
+import sansItalicUrl from "./udf-fonts/LiberationSans-Italic.ttf?url";
+import sansBoldItalicUrl from "./udf-fonts/LiberationSans-BoldItalic.ttf?url";
 
 // Paragraph layout is adapted from egPDF's MIT-licensed UDF renderer.
 // Upstream: acc-studio/egpdf at c14775fd388cc49c5e9884d4a1b01340261ae0ec.
 // Redistribution notices are in public/licenses.
 
-const fontUrls = { regular: regularUrl, bold: boldUrl, italic: italicUrl, boldItalic: boldItalicUrl };
+const fontUrls = {
+  "Liberation Serif": { regular: regularUrl, bold: boldUrl, italic: italicUrl, boldItalic: boldItalicUrl },
+  "Liberation Sans": { regular: sansRegularUrl, bold: sansBoldUrl, italic: sansItalicUrl, boldItalic: sansBoldItalicUrl },
+};
+const fallbackFamilies = new Map(udfFontPresets.flatMap(({ family, fallback }) => [
+  [udfFontFamilyKey(family), fallback],
+  [udfFontFamilyKey(fallback), fallback],
+]));
+const logicalFamilies = new Map([["serif", "Times New Roman"], ["sansserif", "Arial"], ["sans-serif", "Arial"]]);
 const maxFileBytes = 8 * 1024 * 1024;
 const maxTextCharacters = 100000;
 const maxArchiveEntries = 16;
 const parsedDocuments = new WeakMap();
 const faceLabels = { regular: "normal", bold: "kalın", italic: "italik", boldItalic: "kalın italik" };
-const defaultFontFamily = "Times New Roman";
-const fallbackFontFamily = "Liberation Serif";
 const formatFields = ["family", "size", "bold", "italic", "underline", "foreground", "background"];
 const paragraphFields = ["Alignment", "LeftIndent", "RightIndent", "FirstLineIndent", "SpaceAbove", "SpaceBelow", "LineSpacing"];
 const unsupported = "Bu UDF, beta sürümün desteklediği metin düzeninin dışında.";
@@ -168,9 +179,9 @@ function loadDocument(file) {
   return parsedDocuments.get(file);
 }
 
-function styleFamily(style) {
+function styleFamily(style, defaultFontFamily) {
   const name = style.family?.trim() || defaultFontFamily;
-  return udfFontFamilyKey(name) === "serif" ? defaultFontFamily : name;
+  return logicalFamilies.get(udfFontFamilyKey(name)) ?? name;
 }
 
 function styleFace(style) {
@@ -188,18 +199,18 @@ function visibleText(value) {
   return value.replace(/[\r\n\u200b]/gu, "");
 }
 
-export async function inspectUdfFonts(file) {
+export async function inspectUdfFonts(file, defaultFontFamily = defaultUdfFontFamily) {
   const { blocks } = await loadDocument(file);
-  return collectFontRequirements(blocks);
+  return collectFontRequirements(blocks, defaultFontFamily);
 }
 
-function collectFontRequirements(blocks) {
+function collectFontRequirements(blocks, defaultFontFamily) {
   const needed = new Map();
   for (const block of blocks) {
     if (block.break) continue;
     const styles = block.runs.filter(run => run.text).map(run => run.style);
     for (const style of styles.length ? styles : [block.settings]) {
-      const family = styleFamily(style);
+      const family = styleFamily(style, defaultFontFamily);
       const key = udfFontFamilyKey(family);
       const requirement = needed.get(key) ?? { family, faces: new Set() };
       requirement.faces.add(styleFace(style));
@@ -230,9 +241,9 @@ async function paragraphTokens(runs, baseSize, spacing, getFont) {
   for (const run of runs) {
     const text = visibleText(run.text);
     if (!text) continue;
-    const { font, metrics, characters } = await getFont(run.style);
+    const { font, metrics, characters, family } = await getFont(run.style);
     if ([...text].some(character => character !== "\t" && !characters.has(character.codePointAt(0)))) {
-      fail(`“${styleFamily(run.style)}” yazı tipinde belgedeki bazı karakterler bulunamadı.`);
+      fail(`“${family}” yazı tipinde belgedeki bazı karakterler bulunamadı.`);
     }
     const size = number(run.style.size, baseSize, 1, 96);
     const style = {
@@ -309,28 +320,29 @@ async function layoutParagraph(block, width, getFont) {
   return { above, below, lines };
 }
 
-export async function udfToPdf(file, customFonts = new Map()) {
+export async function udfToPdf(file, customFonts = new Map(), defaultFontFamily = defaultUdfFontFamily) {
   const { dimensions: [width, height], margins: [left, right, top, bottom], blocks } = await loadDocument(file);
   const document = await PDFDocument.create();
   document.registerFontkit(fontkit);
   const embedded = new Map();
-  const alternativeFonts = new Set();
+  const alternativeFonts = new Map();
   async function getFont(style) {
-    const family = styleFamily(style);
+    const family = styleFamily(style, defaultFontFamily);
     const key = udfFontFamilyKey(family);
     const face = styleFace(style);
     const supplied = customFonts.get(key)?.faces[face];
+    const fallback = fallbackFamilies.get(key);
     if (!supplied) {
-      if (customFonts.size || ![udfFontFamilyKey(defaultFontFamily), udfFontFamilyKey(fallbackFontFamily)].includes(key)) {
+      if (customFonts.size || !fallback) {
         fail(`Belge için “${family}” yazı tipinin ${faceLabels[face]} TTF dosyasını ekleyin.`);
       }
-      if (key !== udfFontFamilyKey(fallbackFontFamily)) alternativeFonts.add(family);
+      if (key !== udfFontFamilyKey(fallback)) alternativeFonts.set(key, { family, fallback });
     }
-    const fontKey = `${supplied ? key : udfFontFamilyKey(fallbackFontFamily)}:${face}`;
+    const fontKey = `${supplied ? key : udfFontFamilyKey(fallback)}:${face}`;
     if (!embedded.has(fontKey)) {
       let bytes = supplied?.bytes;
       if (!bytes) {
-        const response = await fetch(fontUrls[face]);
+        const response = await fetch(fontUrls[fallback][face]);
         if (!response.ok) fail("UDF yazı tipi yüklenemedi. Yeniden deneyin.");
         bytes = new Uint8Array(await response.arrayBuffer());
       }
@@ -341,9 +353,9 @@ export async function udfToPdf(file, customFonts = new Map()) {
       });
       embedded.set(fontKey, { font, metrics, characters: new Set(font.getCharacterSet()) });
     }
-    return embedded.get(fontKey);
+    return { ...embedded.get(fontKey), family: supplied ? family : fallback };
   }
-  for (const { family, faces } of collectFontRequirements(blocks)) {
+  for (const { family, faces } of collectFontRequirements(blocks, defaultFontFamily)) {
     if (!customFonts.size) continue;
     const supplied = customFonts.get(udfFontFamilyKey(family));
     const missing = faces.filter(face => !supplied?.faces[face]);
@@ -410,8 +422,7 @@ export async function udfToPdf(file, customFonts = new Map()) {
     mimeType: "application/pdf",
     pageCount: document.getPageCount(),
     fileCount: 1,
-    warnings: alternativeFonts.size
-      ? [`${[...alternativeFonts].join(", ")} dosyası eklenmediği için Liberation Serif kullanıldı. Yerleşim farklılıkları için önizlemeyi kontrol edin.`]
-      : [],
+    warnings: [...alternativeFonts.values()].map(({ family, fallback }) =>
+      `“${family}” için ${fallback} kullanıldı. Yerleşim farklılıkları için önizlemeyi kontrol edin.`),
   };
 }

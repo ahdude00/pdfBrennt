@@ -1,4 +1,5 @@
 import { icon, escapeHtml, fileDetails, toolHeader } from "./ui.js";
+import { udfFontPresets } from "./udf-font-presets.js";
 
 const e = escapeHtml;
 
@@ -115,6 +116,13 @@ function udfFontSettings(view) {
       <h3>Yazı tipleri</h3>
       ${supplied.length ? '<button type="button" class="text-button" data-clear-fonts>Kaldır</button>' : ""}
     </div>
+    <label class="field-label udf-font-default" for="udf-font-default">
+      Varsayılan yazı tipi
+      <select class="control" id="udf-font-default" aria-describedby="udf-font-default-help">
+        ${udfFontPresets.map(({ family }) => `<option value="${e(family)}" ${family === view.defaultFontFamily ? "selected" : ""}>${e(family)}</option>`).join("")}
+      </select>
+    </label>
+    <p id="udf-font-default-help">Belgede yazı tipi belirtilmediğinde kullanılır.</p>
     ${required.length ? `<ul class="udf-font-list" aria-label="Belgede kullanılan yazı tipleri">${required.map(({ family, faces }) =>
       `<li><strong>${e(family)}</strong><span>${faces.map(face => udfFaceLabels[face]).join(", ")}</span></li>`).join("")}</ul>` : ""}
     <p>Kaynak belgede kullanılan yazı tiplerinin TTF dosyalarını ekleyin. Kalın ve italik biçimler ayrı dosyalar olabilir.</p>
@@ -125,7 +133,7 @@ function udfFontSettings(view) {
     </label>
     ${supplied.length ? `<ul class="udf-font-list" aria-label="Eklenen yazı tipleri">${supplied.map(({ family, faces }) =>
       `<li><strong>${e(family)}</strong><span>${Object.keys(faces).map(face => udfFaceLabels[face]).join(", ")} eklendi</span></li>`).join("")}</ul>` :
-      '<p>Yazı tipi eklenmezse Times New Roman belgelerinde Liberation Serif kullanılır.</p>'}
+      '<p>Orijinal TTF eklenmediğinde Times New Roman için Liberation Serif, Arial için Liberation Sans kullanılır.</p>'}
   </div>`;
 }
 

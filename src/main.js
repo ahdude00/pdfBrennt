@@ -2,6 +2,7 @@ import { catalog, escapeHtml, home, icon, iconTile, renderCatalog } from "./ui.j
 import { convertScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
 import { formatRange, parseRange } from "./page-ranges.js";
 import { runPdfOperation } from "./pdf-client.js";
+import { defaultUdfFontFamily, udfFontPresets } from "./udf-font-presets.js";
 
 const app = document.querySelector("#app");
 const dialog = document.querySelector("#dialog");
@@ -9,7 +10,10 @@ const state = {
   home: { search: "", group: "Tümü" },
   merge: { files: [], name: "birlesik-belge.pdf" },
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
-  convert: { files: [], kind: "image", size: "original", udf: { file: null, fonts: new Map() } },
+  convert: {
+    files: [], kind: "image", size: "original",
+    udf: { file: null, fonts: new Map(), defaultFontFamily: defaultUdfFontFamily },
+  },
 };
 const routes = {
   araclar: { key: "home", screen: home },
@@ -148,6 +152,7 @@ function render() {
   }
   if (key === "convert" && view.kind === "udf") {
     app.querySelector("#udf-action").disabled = Boolean(view.udf.busy || view.udf.loading || !view.udf.file);
+    app.querySelector("#udf-font-default").disabled = Boolean(view.udf.busy || view.udf.loading);
   }
   const canvas = app.querySelector("#result-canvas");
   if (canvas) void paintResult(toolView(key).result, canvas, app.querySelector("#preview-message"));
@@ -229,7 +234,7 @@ async function loadFiles(key, files) {
           attachment.kind = fileSizeLabel(file.size);
           if (udf) {
             const { inspectUdfFonts } = await import("./udf-engine.js");
-            attachment.fontRequirements = await inspectUdfFonts(file);
+            attachment.fontRequirements = await inspectUdfFonts(file, view.defaultFontFamily);
             view.file = attachment;
           } else view.files.push(attachment);
         } else {
@@ -256,6 +261,35 @@ async function loadFiles(key, files) {
     const restoreFocus = activeKey() === key && document.activeElement === document.body;
     renderActive(key);
     if (restoreFocus) app.querySelector("input[type=file]")?.focus({ preventScroll: true });
+  }
+}
+
+async function selectUdfDefaultFont(select) {
+  const view = state.convert.udf;
+  const family = select.value;
+  if (view.loading || view.busy || !udfFontPresets.some(preset => preset.family === family)) {
+    select.value = view.defaultFontFamily;
+    return;
+  }
+  if (family === view.defaultFontFamily) return;
+  if (!view.file) {
+    view.defaultFontFamily = family;
+    return;
+  }
+
+  view.loading = true;
+  view.problem = "";
+  try {
+    const { inspectUdfFonts } = await import("./udf-engine.js");
+    view.file.fontRequirements = await inspectUdfFonts(view.file.file, family);
+    view.defaultFontFamily = family;
+    discardResult(view);
+  } catch (error) {
+    view.problem = error?.message || "Yazı tipi ayarı güncellenemedi.";
+  } finally {
+    view.loading = false;
+    renderActive("convert");
+    app.querySelector("#udf-font-default")?.focus({ preventScroll: true });
   }
 }
 
@@ -308,7 +342,11 @@ function actionRequest(key, view) {
   if (view === state.convert.udf) {
     if (!view.file) return null;
     const name = view.file.name.replace(/\.udf$/i, "");
-    return { operation: "udfToPdf", args: [view.file.file, view.fonts], name: outputName(name, "pdf", "uyap-belgesi") };
+    return {
+      operation: "udfToPdf",
+      args: [view.file.file, view.fonts, view.defaultFontFamily],
+      name: outputName(name, "pdf", "uyap-belgesi"),
+    };
   }
   if (key === "convert" && view.files.length) {
     const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
@@ -418,6 +456,7 @@ app.addEventListener("input", ({ target }) => {
 
 app.addEventListener("change", ({ target }) => {
   if (target.id === "udf-font-input") void addUdfFonts([...target.files]);
+  else if (target.id === "udf-font-default") void selectUdfDefaultFont(target);
   else if (target.type === "file") void loadFiles(activeKey(), [...target.files]);
   if (target.dataset.mergeMode) {
     state.merge.files.find(file => file.id === Number(target.dataset.mergeMode)).mode = target.value;

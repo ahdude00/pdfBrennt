@@ -10,13 +10,13 @@ Telefon ve bilgisayarda çalışan Türkçe PDF araçları. Dosya işlemleri tar
 - **UYAP (UDF) · Beta** temel, imzasız A4 dikey UDF 1.8 belgelerini aranabilir PDF’ye dönüştürür. Sol, orta ve sağ hizalama, kalın, italik ve altı çizili metin, varsayılan sekmeler, satır kırma ve sayfalama desteklenir.
 - **Önizleme ve indirme** oluşan PDF’nin sayfalarını tarayıcıda gösterir.
 
-UDF sekmesi belgenin kullandığı yazı tipi ailelerini ve biçimlerini listeler. **Yazı tipi ekle** ile kaynak belgedeki statik TTF dosyalarını seçebilirsiniz. Uygulama fontun aile ve biçimini dosyanın içinden okur, gömme bayraklarını denetler ve kullanılan fontları PDF’ye gömer. Bir TTF eklendiğinde eksik aile veya biçimler için ek dosya ister. Hiç TTF eklenmezse Times New Roman belgelerinde Liberation Serif kullanıldığı bildirilir.
+UDF sekmesi belgenin kullandığı yazı tipi ailelerini ve biçimlerini listeler. Belgede aile belirtilmediğinde **Times New Roman** varsayılan olarak seçilir. Varsayılanı **Arial** olarak değiştirebilirsiniz. **Yazı tipi ekle** ile kaynak belgedeki statik TTF dosyalarını seçebilirsiniz. Uygulama fontun aile ve biçimini dosyanın içinden okur, gömme bayraklarını denetler ve kullanılan fontları PDF’ye gömer. Bir TTF eklendiğinde eksik aile veya biçimler için ek dosya ister. Hiç TTF eklenmezse Times New Roman için Liberation Serif, Arial için Liberation Sans kullanılır ve sonuçta gösterilir.
 
 UDF ve font dosyaları cihazda kalır. Dönüşüm için UYAP Editör kurulumu gerekmez. Yatay sayfa, tablo, görsel, özel sekme, iki yana yaslama, imza ve doğrulama kodlu belgeler beta kapsamı dışındadır. Bazı punto ve biçim birleşimlerinde yerleşim farkları olabilir.
 
 Office dönüşümü geliştirme planında yer alır. Belgeleri [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) ile PDF olarak dışa aktarabilirsiniz.
 
-UDF metin yerleşimi egPDF’den uyarlanmıştır. [egPDF lisansı](public/licenses/egpdf-MIT.txt) · [Liberation Serif lisansı](public/licenses/liberation-OFL.txt)
+UDF metin yerleşimi egPDF’den uyarlanmıştır. [egPDF lisansı](public/licenses/egpdf-MIT.txt) · [Liberation yazı tipleri lisansı](public/licenses/liberation-OFL.txt)
 
 Parola korumalı PDF’lerin kilidini önce kaynak uygulamada açın. Birleştirme ve ayırma sayfa içeriğini kopyalar. Etkileşimli formlar ve yer imleri çıktı dosyasına aktarılmayabilir. Dijital imzaları doğrulamak için özgün belgeyi saklayın. 16 bit PNG renk derinliği PDF’de 8 bite düşer. Animasyonlu PNG’nin varsayılan karesi PDF’ye eklenir. Uygulama bu durumları dönüşüm sonucunda bildirir.
 
