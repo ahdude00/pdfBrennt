@@ -7,10 +7,14 @@ Telefon ve bilgisayarda çalışan Türkçe PDF araçları. Dosya işlemleri tar
 - **PDF Birleştir** birden fazla PDF’yi sürükleyerek veya yön düğmeleriyle sıralar. Her dosyada tüm sayfaları ya da `2-4, 7` gibi aralıkları seçebilirsiniz.
 - **PDF Ayır** sayfa aralığı veya küçük resimlerden seçim yapar. Seçili sayfalar tek PDF olarak çıkarılabilir. Ayrı PDF’ler üreten modlarda birden fazla çıktı ZIP olarak indirilir.
 - **PDF’ye Dönüştür** PNG ve JPEG dosyalarını, seçilen sırayla ve en-boy oranını koruyarak görsel boyutunda veya A4 sayfalara yerleştirir.
-- **UYAP (UDF) · Beta** Times New Roman ile hazırlanmış temel, imzasız A4 dikey UDF 1.8 belgelerini aranabilir PDF’ye dönüştürür. Metin biçimleri ve belgeye eklenmiş sayfa sonları desteklenir. Çıktıda metrik uyumlu Liberation Serif kullanılır.
+- **UYAP (UDF) · Beta** temel, imzasız A4 dikey UDF 1.8 belgelerini aranabilir PDF’ye dönüştürür. Sol, orta ve sağ hizalama, kalın, italik ve altı çizili metin, varsayılan sekmeler, satır kırma ve sayfalama desteklenir.
 - **Önizleme ve indirme** oluşan PDF’nin sayfalarını tarayıcıda gösterir.
 
-Office dönüşümü geliştirme planında yer alır. Belgeleri [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) ile PDF olarak dışa aktarabilirsiniz. Yatay, tablolu, görselli, imzalı veya doğrulama kodlu UDF’ler için [UYAP Editör](https://uyap.gov.tr/Uyap-Editor-Yardim) kullanılabilir.
+UDF sekmesi belgenin kullandığı yazı tipi ailelerini ve biçimlerini listeler. **Yazı tipi ekle** ile kaynak belgedeki statik TTF dosyalarını seçebilirsiniz. Uygulama fontun aile ve biçimini dosyanın içinden okur, gömme bayraklarını denetler ve kullanılan fontları PDF’ye gömer. Bir TTF eklendiğinde eksik aile veya biçimler için ek dosya ister. Hiç TTF eklenmezse Times New Roman belgelerinde Liberation Serif kullanıldığı bildirilir.
+
+UDF ve font dosyaları cihazda kalır. Dönüşüm için UYAP Editör kurulumu gerekmez. Yatay sayfa, tablo, görsel, özel sekme, iki yana yaslama, imza ve doğrulama kodlu belgeler beta kapsamı dışındadır. Bazı punto ve biçim birleşimlerinde yerleşim farkları olabilir.
+
+Office dönüşümü geliştirme planında yer alır. Belgeleri [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) ile PDF olarak dışa aktarabilirsiniz.
 
 UDF metin yerleşimi egPDF’den uyarlanmıştır. [egPDF lisansı](public/licenses/egpdf-MIT.txt) · [Liberation Serif lisansı](public/licenses/liberation-OFL.txt)
 

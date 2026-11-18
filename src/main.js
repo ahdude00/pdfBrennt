@@ -9,7 +9,7 @@ const state = {
   home: { search: "", group: "Tümü" },
   merge: { files: [], name: "birlesik-belge.pdf" },
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
-  convert: { files: [], kind: "image", size: "original", udf: { file: null } },
+  convert: { files: [], kind: "image", size: "original", udf: { file: null, fonts: new Map() } },
 };
 const routes = {
   araclar: { key: "home", screen: home },
@@ -206,6 +206,10 @@ async function loadFiles(key, files) {
   if (!files.length || view.loading || view.busy || (key === "convert" && state.convert.kind === "office")) return;
   const udf = view === state.convert.udf;
   const single = udf || key === "split";
+  if (udf) {
+    discardResult(view);
+    view.file = null;
+  }
   view.loading = true;
   view.problem = "";
   renderActive(key);
@@ -223,8 +227,11 @@ async function loadFiles(key, files) {
         const attachment = { id: ++nextFileId, name: file.name, file, format };
         if (key === "convert") {
           attachment.kind = fileSizeLabel(file.size);
-          if (udf) view.file = attachment;
-          else view.files.push(attachment);
+          if (udf) {
+            const { inspectUdfFonts } = await import("./udf-engine.js");
+            attachment.fontRequirements = await inspectUdfFonts(file);
+            view.file = attachment;
+          } else view.files.push(attachment);
         } else {
           const { pageCount, hasDigitalSignature } = await runPdfOperation("inspectPdf", file);
           Object.assign(attachment, { pages: pageCount, hasDigitalSignature, mode: "all", range: "" });
@@ -249,6 +256,29 @@ async function loadFiles(key, files) {
     const restoreFocus = activeKey() === key && document.activeElement === document.body;
     renderActive(key);
     if (restoreFocus) app.querySelector("input[type=file]")?.focus({ preventScroll: true });
+  }
+}
+
+async function addUdfFonts(files) {
+  const view = state.convert.udf;
+  if (!files.length || view.loading || view.busy) return;
+  view.loading = true;
+  view.problem = "";
+  renderActive("convert");
+  try {
+    const { loadUdfCustomFonts } = await import("./udf-custom-fonts.js");
+    const added = await loadUdfCustomFonts(files);
+    for (const [key, { family, faces }] of added) {
+      view.fonts.set(key, { family, faces: { ...view.fonts.get(key)?.faces, ...faces } });
+    }
+    discardResult(view);
+  } catch (error) {
+    view.problem = error?.message || "Yazı tipi dosyaları okunamadı.";
+  } finally {
+    view.loading = false;
+    const restoreFocus = toolView(activeKey()) === view && document.activeElement === document.body;
+    renderActive("convert");
+    if (restoreFocus) app.querySelector("#udf-font-input")?.focus({ preventScroll: true });
   }
 }
 
@@ -278,7 +308,7 @@ function actionRequest(key, view) {
   if (view === state.convert.udf) {
     if (!view.file) return null;
     const name = view.file.name.replace(/\.udf$/i, "");
-    return { operation: "udfToPdf", args: [view.file.file], name: outputName(name, "pdf", "uyap-belgesi") };
+    return { operation: "udfToPdf", args: [view.file.file, view.fonts], name: outputName(name, "pdf", "uyap-belgesi") };
   }
   if (key === "convert" && view.files.length) {
     const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
@@ -387,7 +417,8 @@ app.addEventListener("input", ({ target }) => {
 });
 
 app.addEventListener("change", ({ target }) => {
-  if (target.type === "file") void loadFiles(activeKey(), [...target.files]);
+  if (target.id === "udf-font-input") void addUdfFonts([...target.files]);
+  else if (target.type === "file") void loadFiles(activeKey(), [...target.files]);
   if (target.dataset.mergeMode) {
     state.merge.files.find(file => file.id === Number(target.dataset.mergeMode)).mode = target.value;
     discardResult(state.merge);
@@ -423,6 +454,13 @@ app.addEventListener("click", event => {
   }
   if (button.hasAttribute("data-operation")) void processFiles(key);
   if (button.hasAttribute("data-clear")) clearFiles(view);
+  if (button.hasAttribute("data-clear-fonts") && view === state.convert.udf) {
+    view.fonts.clear();
+    view.problem = "";
+    discardResult(view);
+    render();
+    app.querySelector("#udf-font-input")?.focus({ preventScroll: true });
+  }
   if (mode) {
     if (mode === "split" && view.mode !== value) {
       view.mode = value;

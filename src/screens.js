@@ -105,6 +105,30 @@ function convertHelp() {
     <a href="https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html" target="_blank" rel="noreferrer">LibreOffice yardımı</a></span></div>`;
 }
 
+const udfFaceLabels = { regular: "Normal", bold: "Kalın", italic: "İtalik", boldItalic: "Kalın italik" };
+
+function udfFontSettings(view) {
+  const required = view.file?.fontRequirements ?? [];
+  const supplied = Array.from(view.fonts.values());
+  return `<div class="setting-box udf-font-settings">
+    <div class="udf-font-heading">
+      <h3>Yazı tipleri</h3>
+      ${supplied.length ? '<button type="button" class="text-button" data-clear-fonts>Kaldır</button>' : ""}
+    </div>
+    ${required.length ? `<ul class="udf-font-list" aria-label="Belgede kullanılan yazı tipleri">${required.map(({ family, faces }) =>
+      `<li><strong>${e(family)}</strong><span>${faces.map(face => udfFaceLabels[face]).join(", ")}</span></li>`).join("")}</ul>` : ""}
+    <p>Kaynak belgede kullanılan yazı tiplerinin TTF dosyalarını ekleyin. Kalın ve italik biçimler ayrı dosyalar olabilir.</p>
+    <label class="drop-zone udf-font-picker" for="udf-font-input">
+      <input id="udf-font-input" class="visually-hidden" type="file" accept=".ttf,font/ttf" multiple>
+      <span class="icon">${icon("upload", 19)}</span>
+      <span class="drop-copy"><strong>Yazı tipi ekle</strong><small>TTF dosyaları cihazınızda kalır.</small></span>
+    </label>
+    ${supplied.length ? `<ul class="udf-font-list" aria-label="Eklenen yazı tipleri">${supplied.map(({ family, faces }) =>
+      `<li><strong>${e(family)}</strong><span>${Object.keys(faces).map(face => udfFaceLabels[face]).join(", ")} eklendi</span></li>`).join("")}</ul>` :
+      '<p>Yazı tipi eklenmezse Times New Roman belgelerinde Liberation Serif kullanılır.</p>'}
+  </div>`;
+}
+
 export function convertScreen(view) {
   const image = view.kind === "image";
   const udf = view.kind === "udf";
@@ -118,9 +142,10 @@ export function convertScreen(view) {
       ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
-        <p class="notice udf-notice">${icon("info", 18)}<span>Beta sürüm, Times New Roman ile hazırlanmış temel, imzasız A4 dikey belgeleri destekler. Tablolu, görselli veya doğrulama kodlu belgeler için <a href="https://uyap.gov.tr/Uyap-Editor-Yardim" target="_blank" rel="noreferrer">UYAP Editör’ü kullanın</a>.</span></p>
+        <p class="notice udf-notice">${icon("info", 18)}<span>Beta sürüm imzasız A4 dikey metin belgelerini destekler. Tablo, görsel veya doğrulama kodu içeren belgeler bu kapsama girmiyor.</span></p>
         ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "8 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
         ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
+        ${udfFontSettings(view.udf)}
       ` : convertHelp()}`;
   const description = image
     ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur."

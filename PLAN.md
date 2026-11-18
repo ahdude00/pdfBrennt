@@ -35,7 +35,9 @@ Referanslar sentetik veya kullanımı yetkilendirilmiş belgelerden hazırlanır
 
 ### UDF (UYAP)
 
-Beta, UYAP Editör 5.4.20 çıktısıyla karşılaştırılan temel A4 dikey UDF 1.8 belgelerini kapsar. Yatay sayfa, tablo, görsel, üstbilgi, altbilgi, doğrulama kodu ve imza içeren belgeler için uygulama resmî Editör’e yönlendirir. Tarayıcı çıktısında metrik uyumlu Liberation Serif kullanılır. Elektronik imza doğrulaması için özgün UDF dosyası kullanılır. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim) · [egPDF UDF desteği](https://github.com/acc-studio/egpdf#uyap-documents-udf)
+Bağımsız tarayıcı motoru, UYAP Editör 5.4.20 çıktısıyla karşılaştırılan temel A4 dikey UDF 1.8 belgelerini kapsar. Kullanıcı özgün TTF dosyalarını eklediğinde motor aileyi ve biçimi eşleştirir ve yazı tipini PDF’ye gömer. Times New Roman belgelerine TTF eklenmediğinde Liberation Serif kullanılır ve çıktı üzerinde bilgi verilir. Font gömme ve alt küme bayrakları OpenType OS/2 tablosundan okunur. [OpenType OS/2 tablosu](https://learn.microsoft.com/en-us/typography/opentype/spec/os2)
+
+Sentetik referanslar sol, orta ve sağ hizalama, aynı kelimede dört yazı biçimi, alt çizgi, varsayılan sekmeler ve otomatik veya elle eklenen sayfa sonlarıyla karşılaştırıldı. Yayınlanan kapsamda metin, sayfa ölçüleri ve sayfa sayısı test edilir. Bazı punto ve biçim birleşimlerinde küçük görsel farklar bulundu. İki yana yaslama, özel sekmeler, yatay sayfa, tablolar, görseller, üstbilgi, altbilgi, doğrulama kodu ve imzalı UDF henüz desteklenmiyor. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim) · [egPDF UDF desteği](https://github.com/acc-studio/egpdf#uyap-documents-udf)
 
 ### Office denemesi
 
