@@ -69,10 +69,32 @@ export const cases = {
   ]),
 };
 
+cases["05-sayfalama"] = d => d.build([
+  d.paragraph({ Alignment: "1" }, [{ text: "SAYFALAMA DENEMESİ", bold: "true", size: "14" }]),
+  ...Array.from({ length: 14 }, (_, index) => d.paragraph({ Alignment: index % 3 === 0 ? "3" : "0", SpaceBelow: "6.0", FirstLineIndent: index % 2 ? "28.35" : null },
+    [filler(3 + (index % 4), index)])),
+  d.pageBreak(),
+  d.paragraph({}, ["Elle eklenen sayfa sonundan sonraki paragraf."]),
+  ...Array.from({ length: 6 }, (_, index) => d.paragraph({ LineSpacing: "0.5" }, [{ text: filler(3, index + 2), size: index % 2 ? "11" : "12" }])),
+]);
+cases["06-kenar"] = d => d.build([
+  d.paragraph({ Alignment: "1" }, [{ text: "Farklı kenar boşlukları", bold: "true" }]),
+  d.paragraph({ Alignment: "2" }, ["Sağa yaslı satır"]),
+  d.paragraph({ Alignment: "3" }, [filler(4)]),
+  d.table({ tableName: "Sabit", columnCount: "7", columnSpans: "1,1,1,1,1,1,1", border: "borderCell" }, [
+    d.row({ rowName: "row1", rowType: "dataRow" }, Array.from({ length: 7 }, (_, index) => d.cell({}, [d.paragraph({ Alignment: "1" }, [String(index + 1)])]))),
+  ]),
+  d.table({ tableName: "Sabit", columnCount: "2", columnSpans: "37,63", border: "borderNone" }, [
+    d.row({ rowName: "row1", rowType: "dataRow" }, [d.cell({}, [d.paragraph({}, ["Kenarlıksız"])]), d.cell({}, [d.paragraph({}, [filler(1)])])]),
+  ]),
+  ...Array.from({ length: 30 }, (_, index) => d.paragraph({}, [filler(2, index)])),
+]);
+const caseOptions = { "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
+
 mkdirSync(caseDir, { recursive: true });
 const only = process.argv.slice(2);
 for (const [name, build] of Object.entries(cases)) {
   if (only.length && !only.includes(name)) continue;
-  writeFileSync(join(caseDir, `${name}.udf`), build(createDocument()));
+  writeFileSync(join(caseDir, `${name}.udf`), build(createDocument(caseOptions[name])));
   console.log(`${name}.udf`);
 }

@@ -14,7 +14,9 @@ export function pageGeometry({ left, right, top, bottom }) {
   const pageSize = [width + left - right, height + top - bottom].map(value => Math.round(value * 100) / 100);
   const originX = Math.floor(left) + 1;
   const contentWidth = Math.floor(width - right) + 1 - originX;
-  return { pageSize, originX, contentWidth, top: pageSize[1] - Math.floor(top) + 1, bottom };
+  // Swing paginates within the A4 imageable height. Because the PDF page grows by
+  // (top - bottom), the lowest allowed row bottom lands at the top margin.
+  return { pageSize, originX, contentWidth, top: pageSize[1] - Math.floor(top) + 1, bottom: top };
 }
 
 function color(value) {
@@ -135,7 +137,7 @@ export async function layoutParagraph(block, width, fonts) {
     line.used += advance;
   }
   startLine();
-  for (const token of tokens) {
+  for (const [tokenIndex, token] of tokens.entries()) {
     if (token.type === "tab") {
       if (align !== 0) fail("Bu UDF ortalanmış veya yaslanmış satırda sekme içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
       const position = line.indent - left + line.used;
@@ -145,7 +147,11 @@ export async function layoutParagraph(block, width, fonts) {
       continue;
     }
     const visible = line.items.some(item => item.kind === "image" || item.piece.trim());
-    if (token.type !== "space" && line.used + token.width > line.available && visible) startLine();
+    // Swing breaks after the spaces that follow a word, so a word stays on the line
+    // only when the spaces after it fit as well.
+    // The break test allows one point more than alignment uses.
+    const following = tokens[tokenIndex + 1]?.type === "space" ? tokens[tokenIndex + 1].width : 0;
+    if (token.type !== "space" && line.used + token.width + following > line.available + 1 && visible) startLine();
     if (token.type === "space" && !line.items.length && lines.length > 1) continue;
     if (token.type !== "space" && line.used + token.width > line.available) {
       fail("Bu UDF satıra sığmayan çok uzun bir sözcük veya görsel içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
