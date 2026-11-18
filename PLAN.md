@@ -7,7 +7,7 @@ Telefon ve bilgisayarda tarayıcıdan açılan bir PDF araç kutusu. Ana sayfada
 | Ekran | Akış |
 | --- | --- |
 | **Ana sayfa** | En üstte PDF Dönüştür, PDF Birleştir ve PDF Ayır. Devamında sıkıştırma, sayfa düzenleme, PDF’den görsel alma, filigran, sayfa numaralandırma, OCR ve şifreleme araçları. Masaüstünde kart ızgarası, telefonda dokunmaya uygun kartlar. |
-| **PDF Dönüştür** | PNG veya JPEG seç → sayfa boyutunu belirle → PDF’yi önizle ve indir. UDF beta sekmesinde temel bir UYAP belgesi seç → PDF’yi önizle ve indir. Office sekmesi yerel PDF dışa aktarma seçeneğini gösterir. |
+| **PDF Dönüştür** | PNG veya JPEG seç → sayfa boyutunu belirle → PDF’yi önizle ve indir. UDF sekmesinde bir UYAP belgesi seç → PDF’yi önizle ve indir. Office sekmesi yerel PDF dışa aktarma seçeneğini gösterir. |
 | **PDF Birleştir** | En az iki PDF ekle → dosyaları sürükleyerek veya yukarı/aşağı düğmeleriyle sırala → her satırda **Tüm sayfalar** ya da **Sayfa aralığı** seç → toplam sayfa sayısını gör → birleştir. Örneğin `1-3, 7` dört sayfayı alır. Geçersiz aralık ilgili satırda gösterilir. |
 | **PDF Ayır** | Bir PDF aç → küçük resimlerden veya aralık alanından sayfaları seç → seçilenleri tek PDF’ye al, her aralıktan ayrı bir PDF üret veya her sayfayı ayrı çıkar. Birden fazla çıktı ZIP ile birlikte indirilebilir. |
 
@@ -35,9 +35,16 @@ Referanslar sentetik veya kullanımı yetkilendirilmiş belgelerden hazırlanır
 
 ### UDF (UYAP)
 
-Bağımsız tarayıcı motoru, UYAP Editör 5.4.20 çıktısıyla karşılaştırılan temel A4 dikey UDF 1.8 belgelerini kapsar. Ailesi belirtilmemiş metinlerde varsayılan seçim Times New Roman’dır. Arial da seçilebilir. Kullanıcı özgün TTF dosyalarını eklediğinde motor aileyi ve biçimi eşleştirip yazı tipini PDF’ye gömer. Özgün TTF eklenmediğinde Times New Roman için Liberation Serif, Arial için Liberation Sans kullanılır ve çıktı üzerinde bilgi verilir. Font gömme ve alt küme bayrakları OpenType OS/2 tablosundan okunur. [Resmî Yazışma Yönetmeliği](https://iidb.adalet.gov.tr/Resimler/SayfaDokuman/106202011432920200610-8.pdf) · [OpenType OS/2 tablosu](https://learn.microsoft.com/en-us/typography/opentype/spec/os2)
+Bağımsız tarayıcı motoru A4 dikey UDF 1.8 belgelerini kapsar. Referans PDF’ler bu bilgisayarda kurulu UYAP Editör’ün kendi PDF dışa aktarımından (Java 8) üretilir. Ailesi belirtilmemiş metinlerde varsayılan seçim Times New Roman’dır. Arial da seçilebilir. Kullanıcı özgün TTF dosyalarını eklediğinde motor aileyi ve biçimi eşleştirip yazı tipini PDF’ye gömer. Özgün TTF eklenmediğinde Times New Roman için Liberation Serif, Arial için Liberation Sans kullanılır ve çıktı üzerinde bilgi verilir. Font gömme ve alt küme bayrakları OpenType OS/2 tablosundan okunur. [Resmî Yazışma Yönetmeliği](https://iidb.adalet.gov.tr/Resimler/SayfaDokuman/106202011432920200610-8.pdf) · [OpenType OS/2 tablosu](https://learn.microsoft.com/en-us/typography/opentype/spec/os2)
 
-Sentetik referanslar sol, orta ve sağ hizalama, aynı kelimede dört yazı biçimi, alt çizgi, varsayılan sekmeler ve otomatik veya elle eklenen sayfa sonlarıyla karşılaştırıldı. Yayınlanan kapsamda metin, sayfa ölçüleri ve sayfa sayısı test edilir. Bazı punto ve biçim birleşimlerinde küçük görsel farklar bulundu. İki yana yaslama, özel sekmeler, yatay sayfa, tablolar, görseller, üstbilgi, altbilgi, doğrulama kodu ve imzalı UDF henüz desteklenmiyor. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim) · [egPDF UDF desteği](https://github.com/acc-studio/egpdf#uyap-documents-udf)
+Ölçümlerle bulunan kurallar:
+
+- **Metin.** Kelimeler ipucusuz (unhinted) genişliklerle ölçülür ve kümülatif genişliğin yuvarlandığı konuma yerleşir. Ortalama ve sağa yaslama 510 pt içinde satır genişliğinin tamsayı kısmını kullanır. Bir kelime ancak ardındaki boşluklarla birlikte sığıyorsa satırda kalır.
+- **Satır yüksekliği** `ceil(kesirli satır yüksekliği)`, taban çizgisi Java ascent + leading altındadır. Daha yüksek bir satırda metin `trunc((H − h) × (1 − (jD − 2) / (h_kesirli + 1)))` kadar aşağıdan başlar. Bu kural iki aile, dört biçim ve 6–96 puntonun 728 birleşiminde doğrulandı.
+- **Sayfa.** PDF sayfası üst ve alt kenar farkı kadar büyür, gövde üst kenar boşluğu yüksekliğinde biter. Üstbilgi ve altbilgi kendi ötelemelerinden çizilir ve gövde alanını daraltır.
+- **Görsel, tablo, sekme ve liste.** Satır içi görseller satırın altına oturur. Tablo sütunları `columnSpans` oranıyla 510 pt’ye bölünür. Sekme durakları Swing `TabStop` hizalamalarını izler. Liste işaretleri girintinin önünde ölçülmüş konumlarda durur.
+
+`test/udf` altındaki 11 sentetik belgenin 4’ü UYAP çıktısıyla konum konum aynıdır. Kalan 7’sinde satır ve sayfa kırılımları aynı, yalnızca iki yana yaslı satırlardaki kelimeler 2 pt’ye kadar kayar. `udfConvertor` projesindeki gerçek bir UYAP belgesinde 815 kelimenin hepsi aynı satır ve sayfadadır. Sayfa numarası, yatay sayfa, birleştirilmiş tablo hücresi, çok düzeyli liste, vurgu ve alt/üst simge henüz desteklenmez, bu belgeler nedeni belirtilerek reddedilir. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim)
 
 ### Office denemesi
 

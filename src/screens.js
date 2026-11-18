@@ -144,14 +144,14 @@ export function convertScreen(view) {
   const source = `<div class="mode-options" role="group" aria-label="Dosya türü">
       ${modeButton("convert", "image", "PNG / JPEG", view.kind)}
       ${modeButton("convert", "office", "Word / Excel / PowerPoint", view.kind)}
-      ${modeButton("convert", "udf", "UYAP (UDF) · Beta", view.kind)}
+      ${modeButton("convert", "udf", "UYAP (UDF)", view.kind)}
     </div>
     ${image ? `
       ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
-        <p class="notice udf-notice">${icon("info", 18)}<span>Beta sürüm imzasız A4 dikey metin belgelerini destekler. Tablo, görsel veya doğrulama kodu içeren belgeler bu kapsama girmiyor.</span></p>
-        ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "8 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
+        <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, liste ve sekmeler desteklenir. Sayfa numarası, yatay sayfa veya birleştirilmiş tablo hücresi içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir.</span></p>
+        ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "16 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
         ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
         ${udfFontSettings(view.udf)}
       ` : convertHelp()}`;

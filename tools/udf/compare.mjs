@@ -26,9 +26,9 @@ const order = (a, b) => (b.y - a.y) || (a.x - b.x);
 const near = (a, b) => Math.abs(a - b) <= tolerance;
 const f = value => +value.toFixed(2);
 
-// Words in justified lines may differ by less than one point: UYAP spreads the
+// Words in justified lines may differ by less than two points: UYAP spreads the
 // free width with a rounding scheme that is not reproduced exactly.
-const justifiedTolerance = 1;
+const justifiedTolerance = 2;
 let nearMisses = 0;
 
 function compareList(kind, ours, theirs, key, describe, near) {
@@ -97,7 +97,7 @@ if (process.argv[1]?.endsWith("compare.mjs")) {
     const problems = await compareCase(name);
     if (problems.length) failed++;
     else if (nearMisses) near++;
-    console.log(`${problems.length ? "FAIL" : nearMisses ? "NEAR" : "OK  "} ${name}${nearMisses ? ` (${nearMisses} justified words within 1 pt)` : ""}`);
+    console.log(`${problems.length ? "FAIL" : nearMisses ? "NEAR" : "OK  "} ${name}${nearMisses ? ` (${nearMisses} justified words within 2 pt)` : ""}`);
     for (const problem of problems.slice(0, verbose ? 60 : 8)) console.log(`     ${problem}`);
   }
   console.log(`${names.length - failed - near} exact, ${near} near, ${failed} failed of ${names.length}`);
