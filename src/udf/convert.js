@@ -62,9 +62,13 @@ function collectFontRequirements(blocks, defaultFamily) {
   return [...needed.values()].map(({ family, faces }) => ({ family, faces: [...faces] }));
 }
 
+function allBlocks(model) {
+  return [...model.header, ...model.blocks, ...model.footer];
+}
+
 export function inspectUdf(bytes, defaultFamily = defaultUdfFontFamily) {
   const model = load(bytes);
-  return collectFontRequirements(model.blocks, defaultFamily);
+  return collectFontRequirements(allBlocks(model), defaultFamily);
 }
 
 export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily = defaultUdfFontFamily, loadFallbackFont }) {
@@ -114,7 +118,7 @@ export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily
     },
   };
 
-  for (const { family, faces } of collectFontRequirements(model.blocks, defaultFamily)) {
+  for (const { family, faces } of collectFontRequirements(allBlocks(model), defaultFamily)) {
     if (!customFonts.size) continue;
     const supplied = customFonts.get(udfFontFamilyKey(family));
     const missing = faces.filter(name => !supplied?.faces[name]);

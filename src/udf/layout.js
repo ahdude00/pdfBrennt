@@ -13,7 +13,7 @@ export function pageGeometry({ left, right, top, bottom }) {
   // UYAP's export sizes the PDF page from the imageable area plus twice its offset.
   const pageSize = [width + left - right, height + top - bottom].map(value => Math.round(value * 100) / 100);
   const originX = Math.floor(left) + 1;
-  const contentWidth = Math.floor(width - right) + 1 - originX;
+  const contentWidth = Math.floor(width - left - right);
   // Swing paginates within the A4 imageable height. Because the PDF page grows by
   // (top - bottom), the lowest allowed row bottom lands at the top margin.
   return { pageSize, originX, contentWidth, top: pageSize[1] - Math.floor(top) + 1, bottom: top };
@@ -206,18 +206,7 @@ function columnWidths(spans, total) {
 
 export async function layoutDocument(model, fonts) {
   const geometry = pageGeometry(model.margins);
-  const pages = [];
-  let page;
-  let y;
-  function newPage() {
-    if (pages.length >= 500) fail("Bu UDF 500 sayfa sınırını aşıyor.");
-    page = { items: [] };
-    pages.push(page);
-    y = geometry.top;
-  }
-  function fits(height) {
-    return y - height >= geometry.bottom;
-  }
+  const a4Height = a4[1];
 
   function placeLine(line, x0, top, target) {
     for (const item of line.items) {
@@ -247,56 +236,111 @@ export async function layoutDocument(model, fonts) {
     return { laid, height };
   }
 
+  // Turns blocks into a flow of rows: paragraph lines and table rows.
+  async function flow(blocks) {
+    const rows = [];
+    for (const block of blocks) {
+      if (block.type === "pageBreak") {
+        rows.push({ pageBreak: true });
+        continue;
+      }
+      if (block.type === "paragraph") {
+        const paragraph = await layoutParagraph(block, geometry.contentWidth, fonts);
+        paragraph.lines.forEach((line, index) => rows.push({
+          above: index === 0 ? paragraph.above : 0,
+          below: index === paragraph.lines.length - 1 ? paragraph.below : 0,
+          first: index === 0,
+          height: line.height,
+          draw: (target, top) => placeLine(line, geometry.originX, top, target),
+        }));
+        continue;
+      }
+      const widths = columnWidths(block.spans, geometry.contentWidth);
+      for (const row of block.rows) {
+        const cells = [];
+        let rowHeight = 0;
+        for (const [index, cell] of row.cells.entries()) {
+          const content = await layoutBlocks(cell.blocks, widths[index]);
+          cells.push(content);
+          rowHeight = Math.max(rowHeight, content.height);
+        }
+        rows.push({
+          above: 0, below: 0, first: true, height: rowHeight, table: true,
+          draw(target, top) {
+            let x = geometry.originX;
+            for (const [index, content] of cells.entries()) {
+              let cellTop = top;
+              for (const paragraph of content.laid) {
+                cellTop -= paragraph.above;
+                for (const line of paragraph.lines) {
+                  placeLine(line, x, cellTop, target);
+                  cellTop -= line.height;
+                }
+                cellTop -= paragraph.below;
+              }
+              if (block.border === "borderCell") target.push({ type: "rect", x, y: top - rowHeight, width: widths[index], height: rowHeight });
+              x += widths[index];
+            }
+          },
+        });
+      }
+    }
+    return rows;
+  }
+
+  function sectionHeight(rows) {
+    return rows.reduce((total, row) => total + row.above + row.height + row.below, 0);
+  }
+
+  function drawSection(rows, top, target) {
+    let y = top;
+    for (const row of rows) {
+      y -= row.above;
+      row.draw(target, y);
+      y -= row.height + row.below;
+    }
+  }
+
+  // Header and footer repeat on every page. The header hangs from its offset and
+  // pushes the body down; the footer stands on its offset and raises the body limit.
+  const header = await flow(model.header);
+  const footer = await flow(model.footer);
+  const headerTop = geometry.pageSize[1] - Math.floor(model.margins.header) + 1;
+  const footerBottom = geometry.pageSize[1] - Math.floor(a4Height - model.margins.footer) + 1;
+  const headerHeight = sectionHeight(header);
+  const footerHeight = sectionHeight(footer);
+  const bodyTop = header.length ? Math.min(geometry.top, headerTop - headerHeight) : geometry.top;
+  const bodyLimit = footer.length ? Math.max(geometry.bottom, footerBottom + footerHeight) : geometry.bottom;
+
+  const pages = [];
+  let page;
+  let y;
+  function newPage() {
+    if (pages.length >= 500) fail("Bu UDF 500 sayfa sınırını aşıyor.");
+    page = { items: [] };
+    pages.push(page);
+    y = bodyTop;
+    if (header.length) drawSection(header, headerTop, page.items);
+    if (footer.length) drawSection(footer, footerBottom + footerHeight, page.items);
+  }
+  function fits(height) {
+    return y - height >= bodyLimit;
+  }
+
   newPage();
-  for (const block of model.blocks) {
-    if (block.type === "pageBreak") {
+  for (const row of await flow(model.blocks)) {
+    if (row.pageBreak) {
       newPage();
       continue;
     }
-    if (block.type === "paragraph") {
-      const paragraph = await layoutParagraph(block, geometry.contentWidth, fonts);
-      y -= paragraph.above;
-      for (const [index, line] of paragraph.lines.entries()) {
-        if (!fits(line.height)) {
-          newPage();
-          if (index === 0) y -= paragraph.above;
-          if (!fits(line.height)) fail("Bu UDF sayfaya sığmayan bir satır içeriyor.");
-        }
-        placeLine(line, geometry.originX, y, page.items);
-        y -= line.height;
-      }
-      y -= paragraph.below;
-      continue;
+    y -= row.above;
+    if (!fits(row.height)) {
+      newPage();
+      if (row.first) y -= row.above;
+      if (!fits(row.height)) fail(row.table ? "Bu UDF sayfaya sığmayan bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor." : "Bu UDF sayfaya sığmayan bir satır içeriyor.");
     }
-    const widths = columnWidths(block.spans, geometry.contentWidth);
-    for (const row of block.rows) {
-      const cells = [];
-      let rowHeight = 0;
-      for (const [index, cell] of row.cells.entries()) {
-        const content = await layoutBlocks(cell.blocks, widths[index]);
-        cells.push(content);
-        rowHeight = Math.max(rowHeight, content.height);
-      }
-      if (!fits(rowHeight)) {
-        newPage();
-        if (!fits(rowHeight)) fail("Bu UDF sayfaya sığmayan bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
-      }
-      let x = geometry.originX;
-      for (const [index, content] of cells.entries()) {
-        let top = y;
-        for (const paragraph of content.laid) {
-          top -= paragraph.above;
-          for (const line of paragraph.lines) {
-            placeLine(line, x, top, page.items);
-            top -= line.height;
-          }
-          top -= paragraph.below;
-        }
-        if (block.border === "borderCell") page.items.push({ type: "rect", x, y: y - rowHeight, width: widths[index], height: rowHeight });
-        x += widths[index];
-      }
-      y -= rowHeight;
-    }
+    row.draw(page.items, y);
+    y -= row.height + row.below;
   }
   return { pageSize: geometry.pageSize, pages };
 }

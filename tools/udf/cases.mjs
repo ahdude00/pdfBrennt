@@ -89,7 +89,18 @@ cases["06-kenar"] = d => d.build([
   ]),
   ...Array.from({ length: 30 }, (_, index) => d.paragraph({}, [filler(2, index)])),
 ]);
-const caseOptions = { "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
+cases["07-ustalt"] = d => d.build([
+  d.header({}, [d.paragraph({ Alignment: "1" }, [{ text: "T.C. ÖRNEK ADLİYESİ", bold: "true" }]), d.paragraph({ Alignment: "2" }, [{ text: "Dosya: 2026/1", size: "10" }])]),
+  ...Array.from({ length: 22 }, (_, index) => d.paragraph({ Alignment: index % 2 ? "3" : "0" }, [filler(3, index)])),
+  d.footer({}, [d.paragraph({ Alignment: "1" }, [{ text: "Adres: Örnek Mah. Deneme Sok. No: 1", size: "9" }]), d.paragraph({ Alignment: "1" }, [{ text: "Telefon: 0 312 000 00 00", size: "9" }])]),
+]);
+cases["08-ustalt-kenar"] = d => d.build([
+  d.header({}, [d.paragraph({}, [{ image: asset("logo.png"), width: 60, height: 30 }]), d.paragraph({}, ["Üstbilgi ikinci satır"])]),
+  ...Array.from({ length: 16 }, (_, index) => d.paragraph({}, [filler(4, index)])),
+  d.footer({}, [d.paragraph({ Alignment: "2" }, ["Sağa yaslı altbilgi"])]),
+]);
+const caseOptions = {
+  "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 
 mkdirSync(caseDir, { recursive: true });
 const only = process.argv.slice(2);

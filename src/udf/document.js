@@ -113,6 +113,7 @@ export function parseUdf(bytes) {
   const margins = {
     left: number(format.leftMargin, 42.52, 0, 400), right: number(format.rightMargin, 28.35, 0, 400),
     top: number(format.topMargin, 14.17, 0, 400), bottom: number(format.bottomMargin, 14.17, 0, 400),
+    header: number(format.headerFOffset, 20, 0, 400), footer: number(format.footerFOffset, 20, 0, 400),
   };
 
   const styles = new Map();
@@ -184,13 +185,30 @@ export function parseUdf(bytes) {
     return { type: "paragraph", settings, runs };
   }
 
+  const sectionBlocks = { header: null, footer: null };
+  function readSection(element) {
+    if (sectionBlocks[element.name]) fail();
+    const values = attributes(element, ["background", "foreground", "startPage", "stopPage", "pageNumber-spec", "pageNumber-afterStr",
+      "pageNumber-color", "pageNumber-fontBold", "pageNumber-fontFace", "pageNumber-fontItalic", "pageNumber-fontSize", "pageNumber-fontUnderline",
+      "pageNumber-foreStr", "pageNumber-pageStartNumStr", "pageNumber-seperator"]);
+    if (values["pageNumber-spec"] != null && values["pageNumber-spec"] !== "0") {
+      fail("Bu UDF sayfa numarası içeriyor. Sayfa numarası henüz birebir dönüştürülemiyor.");
+    }
+    if (!["1", undefined].includes(values.startPage) || values.stopPage != null) {
+      fail("Bu UDF yalnızca bazı sayfalarda görünen üstbilgi veya altbilgi içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+    }
+    if (values.background != null && !["-1", "16777215"].includes(values.background)) fail("Bu UDF renkli üstbilgi veya altbilgi içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+    sectionBlocks[element.name] = readBlocks(element, ["paragraph", "table"]);
+  }
+
   function readBlocks(container, allowed) {
     const blocks = [];
     for (const element of container.children) {
-      if (!allowed.includes(element.name)) {
-        if (element.name === "header" || element.name === "footer") fail("Bu UDF üstbilgi veya altbilgi içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
-        fail();
+      if ((element.name === "header" || element.name === "footer") && container === elements) {
+        readSection(element);
+        continue;
       }
+      if (!allowed.includes(element.name)) fail();
       if (element.name === "paragraph") blocks.push(readParagraph(element));
       else if (element.name === "page-break") {
         attributes(element, []);
@@ -239,5 +257,5 @@ export function parseUdf(bytes) {
     if (!covered[index] && !/[\s​]/u.test(text[index])) fail();
   }
   if (!blocks.length || !segmentCount) fail();
-  return { margins, blocks, signed };
+  return { margins, blocks, header: sectionBlocks.header ?? [], footer: sectionBlocks.footer ?? [], signed };
 }
