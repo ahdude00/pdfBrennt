@@ -73,7 +73,9 @@ export async function compareCase(name) {
     problems.push(...compareList(`${prefix} images`, page.images, other.images,
       (a, b) => near(a.x, b.x) && near(a.y, b.y) && near(a.width, b.width) && near(a.height, b.height),
       image => `${f(image.x)},${f(image.y)} ${f(image.width)}x${f(image.height)}`));
-    const boxes = list => list.map(box => ({ x: box.x0, y: box.y0, x1: box.x1, y1: box.y1 }));
+    // UYAP draws a page by clipping the whole document view, so off-page strokes exist but are invisible.
+    const visible = box => box.y1 >= 0 && box.y0 <= page.height && box.x1 >= 0 && box.x0 <= page.width;
+    const boxes = list => list.filter(visible).map(box => ({ x: box.x0, y: box.y0, x1: box.x1, y1: box.y1 }));
     problems.push(...compareList(`${prefix} strokes`, boxes(page.strokes), boxes(other.strokes),
       (a, b) => near(a.x, b.x) && near(a.y, b.y) && near(a.x1, b.x1) && near(a.y1, b.y1),
       box => `${f(box.x)},${f(box.y)}–${f(box.x1)},${f(box.y1)}`));

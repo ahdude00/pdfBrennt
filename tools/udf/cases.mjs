@@ -124,6 +124,35 @@ cases["11-yasli-sekme"] = d => d.build([
   d.paragraph({ Alignment: "1" }, [{ tab: true }, "Ortalı sekmeli satır"]),
   d.paragraph({ Alignment: "2" }, ["Sağa", { tab: true }, "yaslı"]),
 ]);
+cases["12-tablo-kenar"] = d => d.build([
+  d.paragraph({}, ["Dış kenarlıklı tablo:"]),
+  d.table({ tableName: "Sabit", columnCount: "3", columnSpans: "100,200,150", border: "borderTable" }, [
+    d.row({ rowName: "row1", rowType: "headerRow" }, ["No", "Konu", "Tutar"].map(text => d.cell({}, [d.paragraph({ Alignment: "1" }, [{ text, bold: "true" }])]))),
+    d.row({ rowName: "row2", rowType: "dataRow", height: "30.0" }, ["1", filler(1), "100 TL"].map(text => d.cell({}, [d.paragraph({}, [text])]))),
+  ]),
+  d.paragraph({}, ["Satır kenarlıklı ve düzensiz satırlı tablo:"]),
+  d.table({ tableName: "Sabit", columnCount: "3", columnSpans: "100,200,150", border: "borderRow" }, [
+    d.row({ rowName: "row1", rowType: "dataRow" }, ["İki hücreli satır", "ikinci"].map(text => d.cell({}, [d.paragraph({}, [text])]))),
+    d.row({ rowName: "row2", rowType: "dataRow" }, ["a", "b", "c"].map(text => d.cell({}, [d.paragraph({}, [text])]))),
+    d.row({ rowName: "row3", rowType: "dataRow" }, [d.cell({}, [d.paragraph({ Alignment: "1" }, ["Tek hücre"])])]),
+  ]),
+  d.paragraph({}, ["Sayfaya taşan hücre kenarlıklı tablo:"]),
+  d.table({ tableName: "Sabit", columnCount: "2", columnSpans: "1,3", border: "borderCell" }, [
+    d.row({ rowName: "row1", rowType: "headerRow" }, ["Sıra", "Açıklama"].map(text => d.cell({}, [d.paragraph({}, [{ text, bold: "true" }])]))),
+    ...Array.from({ length: 40 }, (_, index) => d.row({ rowName: `row${index + 2}`, rowType: "dataRow" }, [String(index + 1), filler(1 + (index % 2), index)].map(text => d.cell({}, [d.paragraph({}, [text])])))),
+  ]),
+  d.paragraph({}, ["Tablodan sonra."]),
+]);
+// Tables whose second row meets the page end with zero, some or all of its lines fitting.
+cases["13-tablo-bolme"] = d => d.build([49, 50, 51].flatMap((count, index) => [
+  ...(index ? [d.pageBreak()] : []),
+  ...Array.from({ length: count }, (_, line) => d.paragraph({}, [`Paragraf ${line + 1}`])),
+  d.table({ tableName: "Sabit", columnCount: "2", columnSpans: "1,9", border: index === 1 ? "borderNone" : "borderCell" }, [
+    d.row({ rowName: "row1", rowType: "dataRow" }, [d.cell({}, [d.paragraph({}, ["1"])]), d.cell({}, [d.paragraph({}, ["tek satır"])])]),
+    d.row({ rowName: "row2", rowType: "dataRow" }, [d.cell({}, [d.paragraph({}, ["2"])]), d.cell({}, Array.from({ length: [5, 3, 5][index] }, (_, line) => d.paragraph({}, [`madde ${line + 1}`])))]),
+    d.row({ rowName: "row3", rowType: "dataRow" }, [d.cell({}, [d.paragraph({}, ["3"])]), d.cell({}, [d.paragraph({}, [filler(2, index)])])]),
+  ]),
+]).concat([d.paragraph({}, ["Son paragraf."])]));
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

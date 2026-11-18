@@ -150,7 +150,7 @@ export function convertScreen(view) {
       ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
-        <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, liste ve sekmeler desteklenir. Sayfa numarası, yatay sayfa veya birleştirilmiş tablo hücresi içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir.</span></p>
+        <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, liste ve sekmeler desteklenir. Sayfa numarası, yatay sayfa veya biçimlendirilmiş tablo hücresi gibi henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir.</span></p>
         ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "16 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
         ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
         ${udfFontSettings(view.udf)}

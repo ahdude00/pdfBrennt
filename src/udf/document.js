@@ -257,12 +257,13 @@ export function parseUdf(bytes) {
     const spans = (values.columnSpans ?? "").split(",").map(value => number(value, NaN, 0.01, 100000));
     if (spans.length !== columnCount) fail();
     const border = values.border ?? "borderCell";
-    if (!["borderCell", "borderNone"].includes(border)) fail("Bu UDF farklı tablo kenarlıkları içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+    if (!["borderCell", "borderNone", "borderRow", "borderTable"].includes(border)) fail("Bu UDF farklı tablo kenarlıkları içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
     const rows = [];
     for (const rowElement of element.children) {
       if (rowElement.name !== "row") fail();
-      const rowValues = attributes(rowElement, ["rowName", "rowType"], "gelişmiş tablo satırları");
-      if (rowValues.rowType != null && rowValues.rowType !== "dataRow") fail("Bu UDF başlık satırı tekrarlayan tablo içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+      // UYAP Editör ignores a row height and does not repeat header rows on new pages.
+      const rowValues = attributes(rowElement, ["rowName", "rowType", "height"], "gelişmiş tablo satırları");
+      if (rowValues.rowType != null && !["dataRow", "headerRow"].includes(rowValues.rowType)) fail();
       const cells = rowElement.children.map(cellElement => {
         if (cellElement.name !== "cell") fail();
         attributes(cellElement, [], "birleştirilmiş veya biçimlendirilmiş tablo hücreleri");
@@ -270,7 +271,7 @@ export function parseUdf(bytes) {
         if (!blocks.length) fail();
         return { blocks };
       });
-      if (cells.length !== columnCount) fail("Bu UDF birleştirilmiş tablo hücreleri içeriyor. Bu öğe henüz birebir dönüştürülemiyor.");
+      if (!cells.length) fail();
       rows.push({ cells });
     }
     if (!rows.length) fail();

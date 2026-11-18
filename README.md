@@ -14,7 +14,7 @@ UDF sekmesi belgenin kullandığı yazı tipi ailelerini ve biçimlerini listele
 
 UDF ve font dosyaları cihazda kalır. Dönüşüm için UYAP Editör kurulumu gerekmez. Görseller yeniden sıkıştırılmadan, özgün baytlarıyla PDF’ye gömülür.
 
-Dönüştürücü birebir çizemediği bir öğeyle karşılaşırsa eksik PDF üretmez, öğeyi adıyla belirterek belgeyi reddeder. Bu öğeler şunlardır: sayfa numarası, yatay sayfa ve A4 dışı kâğıt, birleştirilmiş veya biçimlendirilmiş tablo hücreleri, çok düzeyli listeler, yuvarlak dışındaki madde işaretleri, noktalı sekme dolgusu, vurgulu, üstü çizili, alt ve üst simge metin. İki yana yaslı satırlarda satır kırılımı aynıdır, kelimeler ise UYAP çıktısına göre en fazla 2 pt kayabilir.
+Dönüştürücü birebir çizemediği bir öğeyle karşılaşırsa eksik PDF üretmez, öğeyi adıyla belirterek belgeyi reddeder. Bu öğeler şunlardır: sayfa numarası, yatay sayfa ve A4 dışı kâğıt, kenarlığı veya rengi ayrıca biçimlendirilmiş tablo hücreleri, birden çok sayfaya yayılan dış kenarlıklı tablolar, çok düzeyli listeler, yuvarlak dışındaki madde işaretleri, noktalı sekme dolgusu, vurgulu, üstü çizili, alt ve üst simge metin. İki yana yaslı satırlarda satır kırılımı aynıdır, kelimeler ise UYAP çıktısına göre en fazla 2 pt kayabilir.
 
 Yerleşim kuralları kurulu UYAP Editör’ün PDF dışa aktarımına karşı ölçüldü. `test/udf` klasöründeki sentetik belgeler her yayında UYAP referanslarıyla kelime kelime karşılaştırılır (`npm run udf:compare`). Ölçüm ve referans araçları [tools/udf](tools/udf/README.md) altındadır.
 

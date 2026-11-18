@@ -17,7 +17,9 @@ export function pageGeometry({ left, right, top, bottom }) {
   const contentWidth = Math.floor(width - left - right);
   // Swing paginates within the A4 imageable height. Because the PDF page grows by
   // (top - bottom), the lowest allowed row bottom lands at the top margin.
-  return { pageSize, originX, contentWidth, top: pageSize[1] - Math.floor(top) + 1, bottom: top };
+  const bodyTop = pageSize[1] - Math.floor(top) + 1;
+  // Swing paginates ceil(imageable height) below the body top; rows must end above that cut.
+  return { pageSize, originX, contentWidth, top: bodyTop, bottom: bodyTop - Math.ceil(height - top - bottom) };
 }
 
 function color(value) {
@@ -324,8 +326,11 @@ export async function layoutDocument(model, fonts) {
         }));
         continue;
       }
-      const widths = columnWidths(block.spans, geometry.contentWidth);
+      // A row with as many cells as columns follows columnSpans; any other row is split evenly.
+      const columnWidthsOf = row => columnWidths(row.cells.length === block.spans.length ? block.spans : row.cells.map(() => 1), geometry.contentWidth);
+      const tableRows = [];
       for (const row of block.rows) {
+        const widths = columnWidthsOf(row);
         const cells = [];
         let rowHeight = 0;
         for (const [index, cell] of row.cells.entries()) {
@@ -333,26 +338,62 @@ export async function layoutDocument(model, fonts) {
           cells.push(content);
           rowHeight = Math.max(rowHeight, content.height);
         }
+        // Every line of every cell with its offset from the cell top.
+        const cellLines = cells.map(content => {
+          const entries = [];
+          let offset = 0;
+          for (const paragraph of content.laid) {
+            offset += paragraph.above;
+            for (const [lineIndex, line] of paragraph.lines.entries()) {
+              entries.push({ line, top: offset, bottom: offset + line.height, marker: lineIndex === 0 ? paragraph.marker : null });
+              offset += line.height;
+            }
+            offset += paragraph.below;
+          }
+          return entries;
+        });
+        const drawPart = (target, top, height, pick, shift) => {
+          let x = geometry.originX;
+          for (const [index, entries] of cellLines.entries()) {
+            for (const entry of entries.filter(pick)) {
+              placeLine(entry.line, x, top - entry.top + shift(index), target);
+              if (entry.marker) drawMarker(entry.marker, x, top - entry.top + shift(index), target);
+            }
+            if (block.border === "borderCell") target.push({ type: "rect", x, y: top - height, width: widths[index], height });
+            x += widths[index];
+          }
+          if (block.border === "borderRow") target.push({ type: "rect", x: geometry.originX, y: top - height, width: geometry.contentWidth, height });
+        };
         rows.push({
           above: 0, below: 0, first: true, height: rowHeight, table: true,
-          draw(target, top) {
-            let x = geometry.originX;
-            for (const [index, content] of cells.entries()) {
-              let cellTop = top;
-              for (const paragraph of content.laid) {
-                cellTop -= paragraph.above;
-                for (const [lineIndex, line] of paragraph.lines.entries()) {
-                  placeLine(line, x, cellTop, target);
-                  if (lineIndex === 0 && paragraph.marker) drawMarker(paragraph.marker, x, cellTop, target);
-                  cellTop -= line.height;
-                }
-                cellTop -= paragraph.below;
-              }
-              if (block.border === "borderCell") target.push({ type: "rect", x, y: top - rowHeight, width: widths[index], height: rowHeight });
-              x += widths[index];
-            }
+          draw: (target, top) => drawPart(target, top, rowHeight, () => true, () => 0),
+          // UYAP splits a row at the page cut: lines that end above the cut stay, the part
+          // reaches down to the cut, and the remaining lines open the next page.
+          split(target, top, cut) {
+            if (block.border === "borderRow") fail("Bu UDF satır kenarlıklı ve sayfaya bölünen bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+            const room = top - cut;
+            const stays = entry => entry.bottom <= room;
+            drawPart(target, top, room, stays, () => 0);
+            const firsts = cellLines.map(entries => entries.find(entry => !stays(entry))?.top);
+            const rest = Math.max(0, ...cellLines.map((entries, index) => firsts[index] == null ? 0 : entries.at(-1).bottom - firsts[index]));
+            return {
+              height: rest,
+              draw: (nextTarget, nextTop) => drawPart(nextTarget, nextTop, rest, entry => !stays(entry), index => firsts[index] ?? 0),
+            };
           },
         });
+        tableRows.push(rows.at(-1));
+      }
+      if (block.border === "borderTable") {
+        // One rectangle around the whole table; only exact when the table stays on one page.
+        const first = tableRows[0];
+        const height = tableRows.reduce((total, row) => total + row.height, 0);
+        const draw = first.draw;
+        first.draw = (target, top) => {
+          draw(target, top);
+          target.push({ type: "rect", x: geometry.originX, y: top - height, width: geometry.contentWidth, height });
+        };
+        for (const row of tableRows) row.tableGroup = first;
       }
     }
     return rows;
@@ -404,7 +445,18 @@ export async function layoutDocument(model, fonts) {
       continue;
     }
     y -= row.above;
+    if (!fits(row.height) && row.split) {
+      if (row.tableGroup) fail("Bu UDF birden fazla sayfaya yayılan dış kenarlıklı bir tablo içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+      if (bodyLimit !== geometry.bottom) fail("Bu UDF altbilginin üstünde sayfaya bölünen bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+      const rest = row.split(page.items, y, bodyLimit);
+      newPage();
+      if (!fits(rest.height)) fail("Bu UDF birden fazla sayfaya yayılan bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
+      rest.draw(page.items, y);
+      y -= rest.height;
+      continue;
+    }
     if (!fits(row.height)) {
+      if (row.tableGroup && row.tableGroup !== row) fail("Bu UDF birden fazla sayfaya yayılan dış kenarlıklı bir tablo içeriyor. Bu düzen henüz birebir dönüştürülemiyor.");
       newPage();
       if (row.first) y -= row.above;
       if (!fits(row.height)) fail(row.table ? "Bu UDF sayfaya sığmayan bir tablo satırı içeriyor. Bu düzen henüz birebir dönüştürülemiyor." : "Bu UDF sayfaya sığmayan bir satır içeriyor.");
