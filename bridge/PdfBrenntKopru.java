@@ -13,7 +13,6 @@ import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.BindException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -57,6 +56,8 @@ public final class PdfBrenntKopru {
   static final long TIMEOUT_SECONDS = 120;
   static final String TRAY_CLASS = "tr.com.havelsan.uyap.system.editor.utils.tray.TrayUtils";
   static final String JAR_NAME = "editor-app.jar";
+  static final String WINDOWS_EDITOR_DIR = "C:\\UYAP\\Uyap Kelime Islemci";
+  static final String WINDOW_TITLE = "PDF Brennt köprüsü";
   static final File SETTINGS = new File(System.getProperty("user.home"), ".pdfbrennt-kopru.properties");
 
   static final Set<String> origins = new LinkedHashSet<String>(Arrays.asList(
@@ -66,7 +67,6 @@ public final class PdfBrenntKopru {
 
   static int port = DEFAULT_PORT;
   static boolean console;
-  static File editorJar;
   static Object tray;
   static Method udfToPdf;
   static ClassLoader uyapLoader;
@@ -100,24 +100,34 @@ public final class PdfBrenntKopru {
       try {
         start(jar);
       } catch (Exception error) {
-        fatal(error.getMessage());
+        error.printStackTrace();
+        fatal("Köprü açılamadı.\nUYAP Doküman Editörü'nü açıp çalıştığını kontrol edin.\nSonra köprüyü yeniden açın.");
       }
     });
   }
 
   static void start(String jarArgument) throws Exception {
-    editorJar = locateJar(jarArgument);
-    if (editorJar == null && !console) editorJar = chooseJar();
-    if (editorJar == null) {
-      fatal("UYAP Editör bulunamadı. editor-app.jar dosyasının yerini --jar ile belirtin.");
-      return;
+    File editorJar = locateJar(jarArgument);
+    if (console) {
+      if (editorJar == null) {
+        fatal("UYAP Editör bulunamadı. editor-app.jar dosyasının yerini --jar ile belirtin.");
+        return;
+      }
+      loadUyap(editorJar);
+    } else {
+      editorJar = prepareEditor(editorJar);
+      if (editorJar == null) {
+        System.exit(0);
+        return;
+      }
     }
-    loadUyap(editorJar);
     HttpServer server;
     try {
-      server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 16);
+      server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 16);
     } catch (BindException error) {
-      fatal("Köprü zaten çalışıyor olabilir: " + port + " numaralı bağlantı noktası kullanımda.");
+      fatal(console ? "Köprü zaten çalışıyor olabilir: " + port + " numaralı bağlantı noktası kullanımda."
+          : "Köprü zaten açık olabilir.\nGörev çubuğunda “PDF Brennt köprüsü” penceresini arayın.\n"
+              + "Pencereyi bulursanız onu kullanın. Bulamazsanız bilgisayarı yeniden başlatıp köprüyü açın.");
       return;
     }
     server.createContext("/", PdfBrenntKopru::handle);
@@ -136,7 +146,7 @@ public final class PdfBrenntKopru {
     if (argument != null && !argument.trim().isEmpty()) candidates.add(new File(argument.trim()));
     String saved = savedJar();
     if (saved != null) candidates.add(new File(saved));
-    candidates.add(new File("C:\\UYAP\\Uyap Kelime Islemci\\" + JAR_NAME));
+    candidates.add(new File(WINDOWS_EDITOR_DIR + "\\" + JAR_NAME));
     for (File candidate : candidates) if (candidate.isFile()) return candidate;
     List<File> roots = new ArrayList<File>();
     for (String variable : new String[] {"ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"}) {
@@ -173,13 +183,39 @@ public final class PdfBrenntKopru {
     return null;
   }
 
-  static File chooseJar() {
-    JOptionPane.showMessageDialog(null, "UYAP Editör otomatik bulunamadı.\nUYAP Editör klasöründeki editor-app.jar dosyasını seçin.",
-        "PDF Brennt köprüsü", JOptionPane.INFORMATION_MESSAGE);
-    JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle("editor-app.jar dosyasını seçin");
-    chooser.setFileFilter(new FileNameExtensionFilter("Java arşivi (*.jar)", "jar"));
-    return chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
+  static File prepareEditor(File jar) {
+    String message = "UYAP Doküman Editörü bulunamadı.";
+    while (true) {
+      if (jar != null) {
+        try {
+          loadUyap(jar);
+          return jar;
+        } catch (Exception | LinkageError error) {
+          error.printStackTrace();
+          message = "Seçilen UYAP dosyası açılamadı.\nUYAP Doküman Editörü'nü açıp çalıştığını kontrol edin.";
+        }
+      }
+      jar = chooseJar(message);
+      if (jar == null) return null;
+    }
+  }
+
+  static File chooseJar(String message) {
+    String instructions = message + "\n\n"
+        + "1. Dosya seç düğmesine basın. Windows'ta önce şu klasöre bakın.\n"
+        + "    " + WINDOWS_EDITOR_DIR + "\n"
+        + "2. editor-app.jar dosyasını seçip Seç düğmesine basın. “Köprü hazır.” yazısını bekleyin.\n"
+        + "3. Dosyayı göremezseniz Dosya Gezgini'nde editor-app.jar adını aratın.\n"
+        + "    Bulduğunuz UYAP klasörünü dosya seçme penceresinde açıp dosyayı seçin.\n"
+        + "    UYAP kurulu değilse köprü penceresini kapatın. UYAP'ı kurup köprüyü yeniden açın.";
+    Object[] options = {"Dosya seç", "Vazgeç"};
+    if (JOptionPane.showOptionDialog(null, instructions, WINDOW_TITLE, JOptionPane.DEFAULT_OPTION,
+        JOptionPane.INFORMATION_MESSAGE, null, options, options[0]) != 0) return null;
+
+    JFileChooser chooser = new JFileChooser(new File(WINDOWS_EDITOR_DIR));
+    chooser.setDialogTitle("UYAP dosyasını seçin");
+    chooser.setFileFilter(new FileNameExtensionFilter("UYAP dosyası (*.jar)", "jar"));
+    return chooser.showDialog(null, "Seç") == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
   }
 
   static String savedJar() {
@@ -203,16 +239,28 @@ public final class PdfBrenntKopru {
   }
 
   static void loadUyap(File jar) throws Exception {
-    uyapLoader = new URLClassLoader(new URL[] {jar.toURI().toURL()}, PdfBrenntKopru.class.getClassLoader());
-    Thread.currentThread().setContextClassLoader(uyapLoader);
-    Class<?> type;
+    URLClassLoader loader = new URLClassLoader(new URL[] {jar.toURI().toURL()}, PdfBrenntKopru.class.getClassLoader());
+    Thread thread = Thread.currentThread();
+    ClassLoader previousLoader = thread.getContextClassLoader();
+    thread.setContextClassLoader(loader);
     try {
-      type = Class.forName(TRAY_CLASS, true, uyapLoader);
-    } catch (ClassNotFoundException error) {
-      throw new Exception("Seçilen dosya UYAP Editör değil ya da bu sürüm desteklenmiyor: " + jar);
+      Class<?> type = Class.forName(TRAY_CLASS, true, loader);
+      Method converter = type.getMethod("udfToPdf", OutputStream.class, ByteArrayInputStream.class);
+      tray = type.getMethod("getInstance").invoke(null);
+      udfToPdf = converter;
+      uyapLoader = loader;
+    } catch (Exception | LinkageError error) {
+      thread.setContextClassLoader(previousLoader);
+      try {
+        loader.close();
+      } catch (IOException closeError) {
+        error.addSuppressed(closeError);
+      }
+      if (error instanceof ClassNotFoundException) {
+        throw new Exception("Seçilen dosya UYAP Editör değil ya da bu sürüm desteklenmiyor: " + jar, error);
+      }
+      throw error;
     }
-    tray = type.getMethod("getInstance").invoke(null);
-    udfToPdf = type.getMethod("udfToPdf", OutputStream.class, ByteArrayInputStream.class);
   }
 
   static byte[] convert(final byte[] udf) throws Exception {
@@ -294,7 +342,7 @@ public final class PdfBrenntKopru {
           output.write(pdf);
         }
         int count = converted.incrementAndGet();
-        if (countLabel != null) SwingUtilities.invokeLater(() -> countLabel.setText("Dönüştürülen belge: " + count));
+        if (countLabel != null) SwingUtilities.invokeLater(() -> countLabel.setText(count + " dosya dönüştürüldü."));
         return;
       }
       send(exchange, 404, "text/plain", "Bulunamadı.");
@@ -326,14 +374,19 @@ public final class PdfBrenntKopru {
   // ---- Window -----------------------------------------------------------------------
 
   static void showWindow() {
-    JFrame frame = new JFrame("PDF Brennt köprüsü");
+    JFrame frame = new JFrame(WINDOW_TITLE);
     frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     JPanel content = new JPanel(new BorderLayout(0, 8));
     content.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
-    content.add(new JLabel("<html><b>Köprü çalışıyor.</b><br>PDF Brennt sitesi UDF dosyalarını bu bilgisayardaki UYAP Editör ile dönüştürebilir."
-        + "<br>Dosyalar bilgisayarınızdan çıkmaz. Kapatınca köprü durur.<br><br>UYAP Editör: " + escape(editorJar.getAbsolutePath()) + "</html>"), BorderLayout.CENTER);
+    content.add(new JLabel("<html><b>Köprü hazır.</b><br><br>"
+        + "1. PDF Brennt sitesine dönün ve belgenizi seçin.<br>"
+        + "2. <b>UYAP köprüsüyle dönüştür</b> düğmesine basın.<br>"
+        + "3. PDF hazır olana kadar bu pencereyi açık tutun.<br>"
+        + "4. İşiniz bitince <b>Köprüyü kapat</b> düğmesine basın.<br><br>"
+        + "Dönüşüm başlamazsa sitedeki uyarıyı izleyin.<br>"
+        + "Dosyalar bilgisayarınızdan çıkmaz.</html>"), BorderLayout.CENTER);
     JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-    countLabel = new JLabel("Dönüştürülen belge: 0");
+    countLabel = new JLabel("0 dosya dönüştürüldü.");
     countLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 12));
     JButton stop = new JButton("Köprüyü kapat");
     stop.addActionListener(event -> System.exit(0));
@@ -346,16 +399,12 @@ public final class PdfBrenntKopru {
     frame.setVisible(true);
   }
 
-  static String escape(String text) {
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-  }
-
   static void fatal(String message) {
     if (console) {
       System.err.println(message);
       System.exit(1);
     }
-    JOptionPane.showMessageDialog(null, message, "PDF Brennt köprüsü", JOptionPane.ERROR_MESSAGE);
+    JOptionPane.showMessageDialog(null, message, WINDOW_TITLE, JOptionPane.ERROR_MESSAGE);
     System.exit(1);
   }
 }

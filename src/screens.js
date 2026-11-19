@@ -139,15 +139,60 @@ function udfFontSettings(view) {
 }
 
 function udfBridgeBox(view) {
-  return `<div class="udf-bridge">
-    <h3>UYAP köprüsü</h3>
-    <p>Belge reddedildiyse veya sonuç beklediğiniz gibi değilse, dönüşümü bilgisayarınızdaki UYAP Editör’e yaptırabilirsiniz. Dosya bu bilgisayardan çıkmaz.</p>
-    <ol>
-      <li><a href="${e(bridgeDownloadUrl)}" download>Köprüyü indirin</a> ve çift tıklayarak açın. UYAP Editör ve Java kurulu olmalıdır.</li>
-      <li>Aşağıdaki düğmeye basın. Tarayıcı bu cihazdaki uygulamalara erişim izni isterse “İzin ver”i seçin.</li>
+  return `<section class="udf-bridge" aria-labelledby="udf-bridge-heading">
+    <h3 id="udf-bridge-heading">UYAP köprüsü</h3>
+    <p>Site belgenizi dönüştüremezse, köprü dönüşümü bu bilgisayardaki <strong>UYAP Doküman Editörü</strong> ile yapar. Belgeniz bilgisayarınızda kalır.</p>
+    <p>Başlamadan önce Windows bilgisayarınızda UYAP Doküman Editörü’nün açıldığını kontrol edin. Bu sayfayı <strong>Chrome</strong> veya <strong>Edge</strong>’de açın. Köprü telefonda çalışmaz.</p>
+    <ol class="udf-bridge-steps">
+      <li>
+        <a href="${e(bridgeDownloadUrl)}" download>Köprüyü indirin</a>
+        <p><kbd>Windows</kbd> + <kbd>E</kbd> tuşlarına basın. Açılan pencerede soldaki <strong>İndirilenler</strong> klasörüne tıklayın. <code>pdfbrennt-kopru.jar</code> dosyasını arayın.</p>
+        <details>
+          <summary>İndirdiğiniz dosyayı bulamıyorsanız</summary>
+          <p>Chrome veya Edge’de <kbd>Ctrl</kbd> + <kbd>J</kbd> tuşlarına basın. İndirme listesinde dosyayı bulun ve dosyanın bulunduğu klasörü açan seçeneği kullanın. Dosya listede yoksa <strong>Köprüyü indirin</strong> bağlantısına yeniden tıklayın.</p>
+        </details>
+      </li>
+      <li>
+        <strong>Köprüyü açın</strong>
+        <p>İndirdiğiniz dosyaya çift tıklayın. <strong>PDF Brennt köprüsü</strong> penceresinde <strong>“Köprü hazır.”</strong> yazısını bekleyin.</p>
+        <details>
+          <summary>Köprü açılmıyorsa</summary>
+          <p>Windows dosyayı hangi programla açacağınızı sorarsa, listede Java varsa onu seçin. Java, UYAP Doküman Editörü’nü çalıştıran programdır.</p>
+          <p>SmartScreen veya bilinmeyen yayımcı uyarısı görürseniz dosyayı <strong>ahdude00.github.io/pdfBrennt/</strong> adresinden indirdiğinizi kontrol edin. Kaynaktan eminseniz ve Windows bu dosyayı açma seçeneği sunuyorsa o seçeneği kullanabilirsiniz. Windows bir tehdit bildirirse veya açmaya izin vermezse uyarıyı kapatın.</p>
+          <p>Çift tıklayınca hiçbir şey olmuyorsa şu adımları izleyin.</p>
+          <ol>
+            <li>Dosya Gezgini’nde indirdiğiniz dosyanın bulunduğu klasörü açın. Dosya adının <code>pdfbrennt-kopru.jar</code> olduğuna bakın.</li>
+            <li>Pencerenin üstündeki adres çubuğuna tıklayın. <code>cmd</code> yazıp <kbd>Enter</kbd>’a basın. Siyah bir pencere açılır.</li>
+            <li>Bu pencereye <code>java -jar pdfbrennt-kopru.jar</code> yazıp <kbd>Enter</kbd>’a basın. Köprü penceresinde <strong>“Köprü hazır.”</strong> yazısını bekleyin. Siyah pencereyi de dönüşüm bitene kadar açık tutun.</li>
+          </ol>
+          <p>Siyah pencerede dosyanın bulunamadığı yazıyorsa klasörü ve dosya adını kontrol edin. Java bulunamadıysa Başlat menüsünden UYAP Doküman Editörü’nü açmayı deneyin. Editör de açılmazsa UYAP kurulumunu tamamlayıp tekrar deneyin.</p>
+        </details>
+        <details>
+          <summary>Köprü UYAP’ın yerini sorarsa</summary>
+          <ol>
+            <li>Köprü penceresinde <strong>Dosya seç</strong> düğmesine basın. Açılan pencerede <code>C:\\UYAP\\Uyap Kelime Islemci</code> klasörüne bakın.</li>
+            <li><code>editor-app.jar</code> dosyasına tıklayıp <strong>Seç</strong> düğmesine basın. Bu dosya UYAP Doküman Editörü’nün bir parçasıdır.</li>
+            <li>Dosya orada yoksa Dosya Gezgini’nde <strong>Bu bilgisayar</strong>’ı açın. Üstteki arama kutusuna <code>editor-app.jar</code> yazın. Bulduğunuz UYAP klasörünü köprünün dosya seçme penceresinde açıp dosyayı seçin. <strong>“Köprü hazır.”</strong> yazısını bekleyin.</li>
+          </ol>
+        </details>
+      </li>
+      <li>
+        <strong>Belgenizi dönüştürün</strong>
+        <p>Bu sayfada UYAP belgenizi seçin. Köprü penceresi açıkken <strong>UYAP köprüsüyle dönüştür</strong> düğmesine basın. Tarayıcı erişim sorarsa <strong>İzin ver</strong>’i seçin.</p>
+        <details>
+          <summary>Erişim engellendiyse</summary>
+          <ol>
+            <li>Adres çubuğunun solundaki site bilgisi simgesine tıklayın. Açılan menüde bu sitenin ayarlarına bakın.</li>
+            <li>Bu bilgisayardaki uygulamalara veya yerel ağa erişim iznini bulun ve izin verin. Ayarı göremezseniz Chrome ya da Edge’i güncelleyip yeniden deneyin.</li>
+            <li>Sayfayı yenileyin. Belgenizi yeniden seçin ve <strong>UYAP köprüsüyle dönüştür</strong> düğmesine tekrar basın.</li>
+          </ol>
+        </details>
+        <p><strong>Dosyanız hazır</strong> yazısını gördüğünüzde <strong>PDF’yi indir</strong> düğmesine basın. Bir hata görürseniz ekrandaki adımı izleyin. İşiniz bitince köprü penceresindeki <strong>Köprüyü kapat</strong> düğmesine basın.</p>
+      </li>
     </ol>
     <button class="button secondary" type="button" data-bridge ${!view.file || view.loading || view.busy ? "disabled" : ""}>UYAP köprüsüyle dönüştür</button>
-  </div>`;
+    <p class="udf-bridge-repeat"><strong>Sonraki kullanımda</strong> İndirilenler’deki köprüyü yeniden açın, sitede belgenizi seçin ve dönüştürün. Aynı dosyayı tekrar indirmeniz gerekmez.</p>
+  </section>`;
 }
 
 export function convertScreen(view) {
@@ -166,7 +211,7 @@ export function convertScreen(view) {
         <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, sayfa numarası, liste, sekme, vurgu ve yatay sayfa desteklenir. Henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir; bu belgeler için aşağıdaki UYAP köprüsünü kullanabilirsiniz.</span></p>
         ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "16 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
         ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
-        ${udfFontSettings(view.udf)}
+        ${view.udf.file?.bridgeOnly ? "" : udfFontSettings(view.udf)}
       ` : convertHelp()}`;
   const description = image
     ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur."

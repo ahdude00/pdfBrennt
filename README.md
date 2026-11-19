@@ -14,7 +14,14 @@ UDF sekmesi belgenin kullandığı yazı tipi ailelerini ve biçimlerini listele
 
 UDF ve font dosyaları cihazda kalır. Dönüşüm için UYAP Editör kurulumu gerekmez. Görseller yeniden sıkıştırılmadan, özgün baytlarıyla PDF’ye gömülür.
 
-**UYAP köprüsü (isteğe bağlı).** Bilgisayarında UYAP Editör ve Java kurulu olan kullanıcı, sitedeki bağlantıdan `pdfbrennt-kopru.jar` dosyasını indirip çalıştırabilir. “UYAP köprüsüyle dönüştür” düğmesi UDF’yi bu bilgisayardaki köprüye gönderir; köprü dönüşümü kurulu UYAP Editör’ün kendi `TrayUtils.udfToPdf` yöntemiyle yapar. Köprü yalnızca `127.0.0.1` adresini dinler ve yalnızca bu sitenin isteklerini kabul eder; dosya bilgisayardan çıkmaz. Chrome ilk kullanımda cihazdaki uygulamalara erişim için izin ister. UYAP’ın kendi PDF’i yazı tiplerini gömmez. Kaynak kod [bridge](bridge/PdfBrenntKopru.java) altındadır.
+**UYAP köprüsü**, UYAP Doküman Editörü kurulu bir Windows bilgisayarda Chrome veya Edge ile kullanılır. Telefonda çalışmaz. Dönüşümü bilgisayarınızdaki editör yapar. Belgeniz bilgisayarınızda kalır.
+
+1. **PDF’ye Dönüştür** ekranında **UYAP (UDF)** seçeneğini açın. **Köprüyü indirin** bağlantısına tıklayın. `pdfbrennt-kopru.jar` dosyası **İndirilenler** klasöründe görünür. Bulamazsanız tarayıcıda `Ctrl + J` ile indirme listesini açın.
+2. İndirdiğiniz dosyaya çift tıklayın. **PDF Brennt köprüsü** penceresinde **“Köprü hazır.”** yazısını bekleyin. Pencere görünmezse sitedeki **Köprü açılmıyorsa** bölümünü izleyin. Köprü UYAP’ın yerini sorarsa penceredeki adımları izleyip `editor-app.jar` dosyasını seçin.
+3. Köprü açıkken sitede belgenizi seçin ve **UYAP köprüsüyle dönüştür** düğmesine basın. Tarayıcı erişim sorarsa **İzin ver**’i seçin. Erişim engellendiyse adres çubuğunun solundaki site simgesinden site ayarlarına girin ve sitedeki **Erişim engellendiyse** adımlarını izleyin.
+4. **Dosyanız hazır** yazısını gördüğünüzde **PDF’yi indir** düğmesine basın. İşiniz bitince **Köprüyü kapat** düğmesine basın. Sonraki kullanımda İndirilenler’deki aynı köprüyü açıp sitede dönüştürün.
+
+UYAP’ın ürettiği PDF’de yazılar başka bir bilgisayarda farklı görünebilir. [Köprü kaynak kodu](bridge/PdfBrenntKopru.java)
 
 Dönüştürücü birebir çizemediği bir öğeyle karşılaşırsa eksik PDF üretmez, öğeyi adıyla belirterek belgeyi reddeder; bu durumda UYAP köprüsü kullanılabilir. Reddedilen öğeler şunlardır: Legal, Executive ve zarf kâğıtları, sayfa arka plan görseli, yalnızca bazı sayfalarda görünen ya da renkli veya çerçeveli üstbilgi ve altbilgi, alan (field) ve barkod öğeleri, negatif girinti, satıra sığmayan sözcük ve sekme, görselle başlayan liste paragrafı, `cellSpan`/`rowSpans` içeren tablolar.
 

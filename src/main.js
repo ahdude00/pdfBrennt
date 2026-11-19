@@ -2,6 +2,7 @@ import { catalog, escapeHtml, home, icon, iconTile, renderCatalog } from "./ui.j
 import { convertScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
 import { formatRange, parseRange } from "./page-ranges.js";
 import { runPdfOperation } from "./pdf-client.js";
+import { bridgeFileSizeLimit, bridgeUdfToPdf } from "./udf-bridge.js";
 import { defaultUdfFontFamily, udfFontPresets } from "./udf-font-presets.js";
 
 const app = document.querySelector("#app");
@@ -151,8 +152,10 @@ function render() {
     app.querySelector("#convert-action").disabled = Boolean(view.busy || view.loading || !view.files.length);
   }
   if (key === "convert" && view.kind === "udf") {
-    app.querySelector("#udf-action").disabled = Boolean(view.udf.busy || view.udf.loading || !view.udf.file);
-    app.querySelector("#udf-font-default").disabled = Boolean(view.udf.busy || view.udf.loading);
+    const { file, busy, loading } = view.udf;
+    app.querySelector("#udf-action").disabled = Boolean(busy || loading || !file || file.bridgeOnly);
+    const fontDefault = app.querySelector("#udf-font-default");
+    if (fontDefault) fontDefault.disabled = Boolean(busy || loading);
   }
   const canvas = app.querySelector("#result-canvas");
   if (canvas) void paintResult(toolView(key).result, canvas, app.querySelector("#preview-message"));
@@ -233,8 +236,14 @@ async function loadFiles(key, files) {
         if (key === "convert") {
           attachment.kind = fileSizeLabel(file.size);
           if (udf) {
-            const { inspectUdfFonts } = await import("./udf-engine.js");
-            attachment.fontRequirements = await inspectUdfFonts(file, view.defaultFontFamily);
+            if (!file.size || file.size > bridgeFileSizeLimit) throw new Error("16 MB veya daha küçük, geçerli bir UDF seçin.");
+            try {
+              const { inspectUdfFonts } = await import("./udf-engine.js");
+              attachment.fontRequirements = await inspectUdfFonts(file, view.defaultFontFamily);
+            } catch (error) {
+              attachment.bridgeOnly = true;
+              errors.push(`${error?.message || "Tarayıcı bu belgeyi açamadı."} “UYAP köprüsüyle dönüştür”ü deneyin.`);
+            }
             view.file = attachment;
           } else view.files.push(attachment);
         } else {
@@ -323,12 +332,13 @@ function outputName(name, extension, fallback) {
 }
 
 async function bridgeToPdf(file) {
-  const { bridgeUdfToPdf } = await import("./udf-bridge.js");
   const bytes = await bridgeUdfToPdf(file);
-  const { pageCount } = await runPdfOperation("inspectPdf", new File([bytes], "uyap.pdf", { type: "application/pdf" }));
+  const { pageCount } = await runPdfOperation("inspectPdf", new File([bytes], "uyap.pdf", { type: "application/pdf" })).catch(() => {
+    throw new Error("PDF sitede açılamadı. Belgeyi UYAP Doküman Editörü’nde açıp PDF olarak kaydetmeyi deneyin.");
+  });
   return {
     bytes, mimeType: "application/pdf", pageCount, fileCount: 1,
-    warnings: ["Bu PDF bilgisayarınızdaki UYAP Editör ile üretildi. UYAP yazı tiplerini PDF’ye gömmez; görünüm, PDF’yi açan cihazdaki yazı tiplerine bağlıdır."],
+    warnings: ["Bu PDF bilgisayarınızdaki UYAP Doküman Editörü ile hazırlandı. PDF’yi başka bir bilgisayarda açtığınızda yazılar farklı görünebilir."],
   };
 }
 
@@ -353,6 +363,7 @@ function actionRequest(key, view, bridge = false) {
     if (!view.file) return null;
     const name = outputName(view.file.name.replace(/\.udf$/i, ""), "pdf", "uyap-belgesi");
     if (bridge) return { operation: "udfBridge", args: [view.file.file], name };
+    if (view.file.bridgeOnly) return null;
     return { operation: "udfToPdf", args: [view.file.file, view.fonts, view.defaultFontFamily], name };
   }
   if (key === "convert" && view.files.length) {
