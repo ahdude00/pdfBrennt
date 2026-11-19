@@ -17,3 +17,10 @@ UYAP Editör runs on the Java 8 runtime it finds (`jre1.8.0_*`, T2K rasterizer).
 `probe.mjs` and `probe-set.mjs` render ad-hoc documents through UYAP Editör and print what it drew; that is how the layout rules in `src/udf/layout.js` were measured. `dump.mjs` prints the positioned content of any PDF.
 
 Set `UYAP_EDITOR_JAR`, `JAVA8_HOME` or `JAVA_HOME` (for `javac`) when the defaults (`C:/UYAP/Uyap Kelime Islemci/editor-app.jar`, `C:/Program Files/Java`) do not apply. All test documents are synthetic. Do not add real case files.
+
+## Page numbers and the view tree
+
+- `npm run udf:outlines` (after `udf:references`): UYAP draws page numbers as glyph outlines. This converts every case with the Windows fonts, checks each page-number run against UYAP's outline and writes `test/udf/reference/<case>.numbers.json`, which `udf:compare` uses. Needs `C:/Windows/Fonts` (or `WINDOWS_FONTS`).
+- `ViewDump.java`: loads a UDF the way the converter does and prints UYAP's laid-out view tree (class, range, allocation, preferred span, alignment). A measuring aid; run it with `runJava8("ViewDump", [file], [uyapJar])`.
+
+The bridge in `bridge/` is built with `npm run bridge:build` into `public/kopru/pdfbrennt-kopru.jar` (ignored by git; the Pages workflow builds it).

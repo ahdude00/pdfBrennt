@@ -322,7 +322,17 @@ function outputName(name, extension, fallback) {
   return base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
 }
 
-function actionRequest(key, view) {
+async function bridgeToPdf(file) {
+  const { bridgeUdfToPdf } = await import("./udf-bridge.js");
+  const bytes = await bridgeUdfToPdf(file);
+  const { pageCount } = await runPdfOperation("inspectPdf", new File([bytes], "uyap.pdf", { type: "application/pdf" }));
+  return {
+    bytes, mimeType: "application/pdf", pageCount, fileCount: 1,
+    warnings: ["Bu PDF bilgisayarınızdaki UYAP Editör ile üretildi. UYAP yazı tiplerini PDF’ye gömmez; görünüm, PDF’yi açan cihazdaki yazı tiplerine bağlıdır."],
+  };
+}
+
+function actionRequest(key, view, bridge = false) {
   if (key === "merge") {
     const selection = mergeSelection(view);
     if (selection.length < 2 || selection.some(part => part.error)) return null;
@@ -341,12 +351,9 @@ function actionRequest(key, view) {
   }
   if (view === state.convert.udf) {
     if (!view.file) return null;
-    const name = view.file.name.replace(/\.udf$/i, "");
-    return {
-      operation: "udfToPdf",
-      args: [view.file.file, view.fonts, view.defaultFontFamily],
-      name: outputName(name, "pdf", "uyap-belgesi"),
-    };
+    const name = outputName(view.file.name.replace(/\.udf$/i, ""), "pdf", "uyap-belgesi");
+    if (bridge) return { operation: "udfBridge", args: [view.file.file], name };
+    return { operation: "udfToPdf", args: [view.file.file, view.fonts, view.defaultFontFamily], name };
   }
   if (key === "convert" && view.files.length) {
     const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
@@ -355,10 +362,10 @@ function actionRequest(key, view) {
   return null;
 }
 
-async function processFiles(key) {
+async function processFiles(key, { bridge = false } = {}) {
   const view = toolView(key);
   if (view.loading || view.busy) return;
-  const request = actionRequest(key, view);
+  const request = actionRequest(key, view, bridge);
   if (!request) return;
   discardResult(view);
   view.busy = true;
@@ -367,6 +374,7 @@ async function processFiles(key) {
   try {
     const result = request.operation === "udfToPdf"
       ? await import("./udf-engine.js").then(({ udfToPdf }) => udfToPdf(...request.args))
+      : request.operation === "udfBridge" ? await bridgeToPdf(...request.args)
       : await runPdfOperation(request.operation, ...request.args);
     const { bytes, ...details } = result;
     const blob = new Blob([bytes], { type: details.mimeType });
@@ -492,6 +500,7 @@ app.addEventListener("click", event => {
     dialog.showModal();
   }
   if (button.hasAttribute("data-operation")) void processFiles(key);
+  if (button.hasAttribute("data-bridge")) void processFiles(key, { bridge: true });
   if (button.hasAttribute("data-clear")) clearFiles(view);
   if (button.hasAttribute("data-clear-fonts") && view === state.convert.udf) {
     view.fonts.clear();

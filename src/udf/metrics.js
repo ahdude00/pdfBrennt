@@ -32,6 +32,7 @@ export function measureFont({ metrics, familyKey, face, size, exact }) {
   const gap = Math.max(0, javaDescent - 2);
   return {
     height,
+    floatHeight,
     ascent: Math.min(height, javaAscent + javaLeading),
     javaAscent,
     javaDescent,

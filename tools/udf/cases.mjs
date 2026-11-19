@@ -153,6 +153,126 @@ cases["13-tablo-bolme"] = d => d.build([49, 50, 51].flatMap((count, index) => [
     d.row({ rowName: "row3", rowType: "dataRow" }, [d.cell({}, [d.paragraph({}, ["3"])]), d.cell({}, [d.paragraph({}, [filler(2, index)])])]),
   ]),
 ]).concat([d.paragraph({}, ["Son paragraf."])]));
+// Underlined words, spaces and tabs in justified, aligned and tabbed lines.
+cases["14-alti-cizili"] = d => {
+  const u = (text, extra = {}) => ({ text, underline: "true", ...extra });
+  const tab = (extra = {}) => ({ tab: true, underline: "true", ...extra });
+  return d.build([
+    d.paragraph({ Alignment: "3" }, [filler(1), u(" altı çizili bir bölüm  iki boşlukla ", { bold: "true" }), filler(2, 2)]),
+    d.paragraph({ Alignment: "3" }, [u(filler(3, 4))]),
+    d.paragraph({ Alignment: "3" }, [{ text: filler(2, 1), family: "Arial", size: "11" }, u(" Arial ile altı çizili boşluklar   ", { family: "Arial", size: "11" }), { text: filler(1, 3), family: "Arial", size: "11" }]),
+    d.paragraph({ Alignment: "3" }, ["   Başında boşluk olan ", u("yaslı"), " paragraf. ", filler(2, 5)]),
+    d.paragraph({ Alignment: "3" }, ["Sekmeli", tab(), u("yaslı satır"), " ", filler(2, 6)]),
+    d.paragraph({}, ["Adı Soyadı:", tab(), tab(), tab()]),
+    d.paragraph({}, ["İmza", tab(), u("          "), " Tarih: ", u("     ", { family: "Arial" })]),
+    d.paragraph({ TabSet: "200.0:0:0,350.0:1:0,450.0:2:0" }, ["Sol", tab(), u("orta"), tab(), u("sağa"), tab(), u("merkez")]),
+    d.paragraph({ Alignment: "1" }, [u("Ortalanmış altı çizili satır  ")]),
+    d.paragraph({ Alignment: "2" }, [u("Sağa yaslı altı çizili")]),
+  ]);
+};
+// Page numbers in the header and the footer: positions, fonts, texts and visibility flags.
+cases["15-sayfa-no"] = d => d.build([
+  d.header({ "pageNumber-spec": "4160", "pageNumber-foreStr": "Sayfa ", "pageNumber-fontFace": "Times New Roman", "pageNumber-fontItalic": "true", "pageNumber-fontSize": "10" },
+    [d.paragraph({}, [{ text: "T.C. ÖRNEK ADLİYESİ", bold: "true" }])]),
+  ...Array.from({ length: 70 }, (_, index) => d.paragraph({ Alignment: index % 3 ? "3" : "0" }, [filler(2, index)])),
+  d.footer({ "pageNumber-spec": "2088", "pageNumber-seperator": " / ", "pageNumber-foreStr": "- ", "pageNumber-afterStr": " -", "pageNumber-fontBold": "true", "pageNumber-pageStartNumStr": "3" },
+    [d.paragraph({ Alignment: "1" }, [{ text: "Adres: Örnek Mah. Deneme Sok. No: 1", size: "9" }])]),
+]);
+// Highlight, strike-through, sub- and superscript, underline at many sizes, also in justified lines.
+cases["16-efektler"] = d => d.build([
+  ...["Times New Roman", "Arial"].flatMap(family => [8, 12, 16, 24, 36].flatMap(size => {
+    const s = String(size);
+    return [
+      d.paragraph({}, [{ text: `N${size} `, size: s, family }, { text: "üst", size: s, family, superscript: "true" }, { text: " orta ", size: s, family }, { text: "alt", size: s, family, subscript: "true" }, { text: " son", size: s, family }]),
+      d.paragraph({}, [{ text: `S${size} `, size: s, family }, { text: "çizili", size: s, family, strikethrough: "true" }, { text: " ", size: s, family },
+        { text: "altıçizili", size: s, family, underline: "true" }, { text: " ", size: s, family }, { text: "vurgu", size: s, family, background: "-256" }]),
+    ];
+  })),
+  d.paragraph({}, [{ text: "Karma ", size: "12" }, { text: "büyük", size: "24" }, { text: " küçük vurgu", size: "10", background: "-16711936" },
+    { text: " üst", size: "10", superscript: "true", background: "-65536" }, { text: " alt", size: "10", subscript: "true", strikethrough: "true" }]),
+  d.paragraph({ Alignment: "3" }, [filler(1), { text: " vurgulu ve çizili yaslı bölüm ", background: "-3355393", strikethrough: "true" }, filler(1, 2),
+    { text: " altı çizili üst simge", underline: "true", superscript: "true" }, filler(1, 3)]),
+  d.paragraph({}, ["Renksiz arka planlar: ", { text: "eksi bir", background: "-1" }, " ", { text: "sıfır", background: "0" }, " ", { text: "beyaz", background: "16777215" }]),
+  d.paragraph({}, ["Sekme", { tab: true, background: "-256", strikethrough: "true" }, { text: "son", background: "-256" }]),
+]);
+// Cell, row and table border settings and rows with their own column spans.
+cases["17-tablo-bicim"] = d => {
+  const cell = (attrs, text) => d.cell(attrs, [d.paragraph({}, [text])]);
+  return d.build([
+    d.paragraph({}, ["Hücre kenarlıkları:"]),
+    d.table({ tableName: "A", columnCount: "3", columnSpans: "1,1,1", border: "borderCell" }, [
+      d.row({ rowName: "r1", rowType: "dataRow" }, [
+        cell({ borderSpec: "31", borderWidth: "2.0", borderColor: "-65536" }, "kırmızı 2"),
+        cell({ borderSpec: "3", borderStyle: "borderStyle-dashed", borderWidth: "1.0" }, "üst kesik"),
+        cell({ borderSpec: "25", borderStyle: "borderStyle-dotted", borderWidth: "1.0" }, "alt sol nokta"),
+      ]),
+      d.row({ rowName: "r2", rowType: "dataRow", columnSpans: "2,1" }, [cell({ borderStyle: "borderStyle-dottedDashed", borderWidth: "1.5" }, "birleşik"), cell({ borderSpec: "1" }, "hiç")]),
+      d.row({ rowName: "r3", rowType: "dataRow", columnSpans: "1,3,2" }, [cell({}, "a"), cell({ borderSpec: "5" }, "b"), cell({ borderStyle: "borderStyle-xyz" }, "c")]),
+      d.row({ rowName: "r4", rowType: "dataRow" }, [cell({ borderSpec: "19", borderStyle: "borderStyle-plain", borderWidth: "0.75", borderColor: "-16776961" }, filler(1)), cell({}, "d"), cell({ borderSpec: "13" }, "e")]),
+    ]),
+    d.paragraph({}, ["Satır kenarlıkları:"]),
+    d.table({ tableName: "B", columnCount: "2", columnSpans: "1,1", border: "borderRow" }, [
+      d.row({ rowName: "r1", rowType: "dataRow", borderSpec: "9", borderColor: "-16776961", borderWidth: "1.0" }, [cell({}, "x"), cell({}, "y")]),
+      d.row({ rowName: "r2", rowType: "dataRow", borderStyle: "borderStyle-dashed", borderWidth: "0.5" }, [cell({}, "z"), cell({}, "w")]),
+    ]),
+    d.paragraph({}, ["Tablo kenarlığı:"]),
+    d.table({ tableName: "C", columnCount: "2", columnSpans: "1,1", border: "borderTable", borderStyle: "borderStyle-dotted", borderWidth: "2.0", borderColor: "-16744448" }, [
+      d.row({ rowName: "r1", rowType: "dataRow" }, [cell({}, "p"), cell({}, "q")]),
+      d.row({ rowName: "r2", rowType: "dataRow" }, [cell({}, "s"), cell({}, "t")]),
+    ]),
+  ]);
+};
+// Rows split across pages for every border kind, a table border over pages and a row
+// longer than two pages, all above a footer.
+cases["18-tablo-sayfa"] = d => {
+  const cell = (lines, from = 1) => d.cell({}, Array.from({ length: lines }, (_, i) => d.paragraph({}, [`satır ${from + i}`])));
+  const lead = count => Array.from({ length: count }, (_, i) => d.paragraph({}, [filler(1, i).slice(0, 60)]));
+  const table = (border, rows) => d.table({ tableName: border, columnCount: "2", columnSpans: "1,2", border }, rows.map((lines, i) =>
+    d.row({ rowName: `r${i}`, rowType: "dataRow" }, [cell(lines), cell(Math.max(1, lines - 2), 100)])));
+  return d.build([
+    ...lead(45), table("borderRow", [1, 9, 2]),
+    d.pageBreak(), ...lead(40), table("borderTable", [1, 2, 1, 2, 1, 2, 1, 2, 1, 2]),
+    d.pageBreak(), ...lead(47), table("borderCell", [1, 9, 2]),
+    d.pageBreak(), ...lead(3), table("borderCell", [1, 120]),
+    d.paragraph({}, ["Son"]),
+    d.footer({}, [d.paragraph({ Alignment: "1" }, [{ text: "Altbilgi", size: "9" }]), d.paragraph({ Alignment: "1" }, [{ text: "ikinci satır", size: "9" }])]),
+  ]);
+};
+// Lists: every number and bullet style over levels 1–7, start numbers, level styles,
+// both flags, lists without an id, long letter lists, indents, spacing, hanging
+// indents, a list in a table and markers taking the first run's font.
+cases["19-listeler"] = d => {
+  const numberTypes = ["NUMBER_TYPE_NUMBER_DOT", "NUMBER_TYPE_ROMAN_BIG_TRE", "NUMBER_TYPE_CHAR_SMALL_D_PARANTHESE", "NUMBER_TYPE_NUMBER_DOT_2",
+    "NUMBER_TYPE_NUMBER_PARANTHESE_2", "NUMBER_TYPE_CHAR_BIG_2", "NUMBER_TYPE_NUMBER_DOT_3"];
+  const bulletTypes = ["BULLET_TYPE_ELLIPSE", "BULLET_TYPE_RECTANGLE", "BULLET_TYPE_RECTANGLE_D", "BULLET_TYPE_ARROW", "BULLET_TYPE_DIAMOND", "BULLET_TYPE_TRIANGLE", "BULLET_TYPE_DIAMOND_2"];
+  return d.build([
+    ...numberTypes.flatMap((type, t) => [d.paragraph({}, [type]),
+      ...[1, 2, 3, 4, 5, 6, 7, 2, 1].map((level, i) => d.paragraph({ Numbered: "true", NumberType: type, ListId: String(100 + t), ListLevel: String(level), LeftIndent: String(18 * level) },
+        [`${type.slice(12)} düzey ${level} öğe ${i + 1}`]))]),
+    d.pageBreak(),
+    ...bulletTypes.flatMap((type, t) => [d.paragraph({}, [type]),
+      ...[1, 2, 3, 4, 5, 6].map(level => d.paragraph({ Bulleted: "true", BulletType: type, ListId: String(200 + t), ListLevel: String(level), LeftIndent: String(20 * level) },
+        [{ text: `madde ${level}`, size: String(8 + level * 3) }]))]),
+    d.pageBreak(),
+    ...[0, 1, 2, 3].map(i => d.paragraph({ Numbered: "true", ListId: "300", ...(i === 2 ? { NumberSetted: "6" } : {}) }, [`öğe ${i}`])),
+    d.paragraph({ Numbered: "true", ListId: "301", ListLevel: "2", SecListTypeLevel2: "BULLET_TYPE_ARROW" }, ["düzey türü madde"]),
+    d.paragraph({ Bulleted: "true", Numbered: "true", ListId: "301", ListLevel: "1", SecListTypeLevel1: "NUMBER_TYPE_ROMAN_SMALL_DOT" }, ["iki bayrak, düzey türüyle"]),
+    d.paragraph({ Bulleted: "true", Numbered: "true", ListId: "301", ListLevel: "1" }, ["iki bayrak, düzey türü yok"]),
+    d.paragraph({ Numbered: "true" }, ["kimliksiz liste"]),
+    d.paragraph({ Numbered: "true", ListId: "302", FirstLineIndent: "21.3", LeftIndent: "36.0" }, [filler(1)]),
+    d.paragraph({ Bulleted: "true", ListId: "303", FirstLineIndent: "-18.0", LeftIndent: "36.0", Hanging: "18.0" }, [filler(2, 1)]),
+    d.paragraph({ Numbered: "true", ListId: "304", LineSpacing: "0.5", SpaceAbove: "7.0" }, ["satır aralıklı"]),
+    d.paragraph({ Numbered: "true", ListId: "304", Alignment: "1" }, ["ortalanmış"]),
+    d.paragraph({ Numbered: "true", ListId: "305", NumberType: "NUMBER_TYPE_ROMAN_SMALL_DOT", NumberSetted: "6" }, [{ text: "kalın", bold: "true", size: "16" }, " sonra normal"]),
+    d.paragraph({ Numbered: "true", ListId: "306" }, [{ text: "üst", superscript: "true" }, " simge ile"]),
+    ...Array.from({ length: 31 }, (_, i) => d.paragraph({ Numbered: "true", ListId: "307", NumberType: "NUMBER_TYPE_CHAR_SMALL_DOT" }, [`harf ${i + 1}`])),
+    d.table({ tableName: "T", columnCount: "2", columnSpans: "1,1", border: "borderCell" }, [
+      d.row({ rowName: "r", rowType: "dataRow" }, [d.cell({}, [d.paragraph({ Numbered: "true", ListId: "300", LeftIndent: "20.0" }, ["hücrede"])]),
+        d.cell({}, [d.paragraph({ Bulleted: "true", ListId: "308", LeftIndent: "20.0" }, ["hücre madde"])])]),
+    ]),
+    d.paragraph({ Numbered: "true", ListId: "300" }, ["tablodan sonra"]),
+  ]);
+};
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

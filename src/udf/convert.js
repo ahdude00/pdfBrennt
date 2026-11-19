@@ -1,8 +1,8 @@
 // UDF → PDF conversion core. It has no browser dependencies: the caller supplies
 // the bytes of the bundled fallback fonts through `loadFallbackFont`.
 import {
-  PDFDocument, beginText, endText, popGraphicsState, pushGraphicsState, rgb,
-  setFillingColor, setFontAndSize, setTextMatrix, showText,
+  LineCapStyle, PDFDocument, beginText, endText, lineTo, moveTo, popGraphicsState, pushGraphicsState, rectangle, rgb,
+  closePath, fill, setDashPattern, setFillingColor, setFillingRgbColor, setFontAndSize, setLineCap, setLineJoin, setLineWidth, setStrokingRgbColor, setTextMatrix, showText, stroke,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { udfFontFamilyKey } from "../udf-custom-fonts.js";
@@ -29,6 +29,18 @@ function load(bytes) {
 function styleFamily(style, defaultFamily) {
   const name = style.family?.trim() || defaultFamily;
   return logicalFamilies.get(udfFontFamilyKey(name)) ?? name;
+}
+
+// Java's Font.getItalicAngle is the hhea caret slope run over rise. The Microsoft
+// fonts UYAP measures with have 7/33 (Arial) and 7/24 (Times New Roman) in their
+// italic faces; the Liberation substitutes round these to 0.21 and 0.29.
+const javaItalicAngles = new Map([["arial", 7 / 33], ["times new roman", 7 / 24]]);
+
+function italicAngle(entry) {
+  if (!entry.faceName.toLowerCase().includes("italic")) return 0;
+  if (javaItalicAngles.has(entry.javaFamily)) return javaItalicAngles.get(entry.javaFamily);
+  const { caretSlopeRise, caretSlopeRun } = entry.metrics.hhea;
+  return caretSlopeRise ? caretSlopeRun / caretSlopeRise : 0;
 }
 
 function styleFace(style) {
@@ -66,9 +78,17 @@ function allBlocks(model) {
   return [...model.header, ...model.blocks, ...model.footer];
 }
 
+// Page numbers are drawn with a style of their own; they join the font list as a paragraph would.
+function pageNumberBlocks(model) {
+  return Object.values(model.pageNumbers).filter(Boolean).map(({ style }) => ({ type: "paragraph", runs: [], settings: style }));
+}
+
+function documentFontRequirements(model, defaultFamily) {
+  return collectFontRequirements([...allBlocks(model), ...pageNumberBlocks(model)], defaultFamily);
+}
+
 export function inspectUdf(bytes, defaultFamily = defaultUdfFontFamily) {
-  const model = load(bytes);
-  return collectFontRequirements(allBlocks(model), defaultFamily);
+  return documentFontRequirements(load(bytes), defaultFamily);
 }
 
 export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily = defaultUdfFontFamily, loadFallbackFont }) {
@@ -114,11 +134,38 @@ export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily
       if (!entry.sizes.has(size)) {
         entry.sizes.set(size, measureFont({ metrics: entry.metrics, familyKey: entry.javaFamily, face: entry.faceName, size, exact: entry.exact }));
       }
-      return { pdfFont: entry.font, measure: entry.sizes.get(size), characters: entry.characters, family: entry.family };
+      const measure = entry.sizes.get(size);
+      const scale = size / entry.metrics.unitsPerEm;
+      return {
+        pdfFont: entry.font, measure, characters: entry.characters, family: entry.family,
+        // java.awt.font.TextLayout.getAdvance: the advances plus, for an italic face,
+        // the italic angle times the float ascent (hhea ascender plus half the line gap).
+        layoutAdvance(text) {
+          const { ascent, lineGap } = entry.metrics.hhea;
+          return measure.width(text) + italicAngle(entry) * (ascent + lineGap / 2) * scale;
+        },
+        // Visual bounds of a string, as java.awt.font.TextLayout.getBounds reports them.
+        bounds(text) {
+          const run = entry.metrics.layout(text, { kern: false, liga: false, clig: false, calt: false });
+          let x = 0;
+          let box = null;
+          for (const [index, glyph] of run.glyphs.entries()) {
+            const glyphBox = glyph.cbox;
+            if (glyphBox.maxX > glyphBox.minX || glyphBox.maxY > glyphBox.minY) {
+              const placed = { minX: x + glyphBox.minX, maxX: x + glyphBox.maxX, minY: glyphBox.minY, maxY: glyphBox.maxY };
+              box = box ? { minX: Math.min(box.minX, placed.minX), maxX: Math.max(box.maxX, placed.maxX), minY: Math.min(box.minY, placed.minY), maxY: Math.max(box.maxY, placed.maxY) } : placed;
+            }
+            x += run.positions[index].xAdvance;
+          }
+          // Java reports outline bounds in 26.6 fixed point.
+          const fixed = value => Math.round(value * scale * 64) / 64;
+          return box ? { x0: fixed(box.minX), x1: fixed(box.maxX), y0: fixed(box.minY), y1: fixed(box.maxY) } : { x0: 0, x1: 0, y0: 0, y1: 0 };
+        },
+      };
     },
   };
 
-  for (const { family, faces } of collectFontRequirements(allBlocks(model), defaultFamily)) {
+  for (const { family, faces } of documentFontRequirements(model, defaultFamily)) {
     if (!customFonts.size) continue;
     const supplied = customFonts.get(udfFontFamilyKey(family));
     const missing = faces.filter(name => !supplied?.faces[name]);
@@ -129,6 +176,10 @@ export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily
   const images = new Map();
   for (const items of layout.pages.map(pageLayout => pageLayout.items)) {
     const page = document.addPage(layout.pageSize);
+    // Background colours go under the text.
+    for (const item of items) {
+      if (item.type === "fill") page.drawRectangle({ x: item.x, y: item.y, width: item.width, height: item.height, color: rgb(...item.color.map(value => value / 255)) });
+    }
     const fontKeys = new Map();
     const text = [];
     for (const item of items) {
@@ -139,12 +190,24 @@ export async function convertUdf(bytes, { customFonts = new Map(), defaultFamily
     }
     if (text.length) page.pushOperators(pushGraphicsState(), beginText(), ...text, endText(), popGraphicsState());
     for (const item of items) {
+      // Java's default stroke is one point wide with square caps.
       if (item.type === "line") {
-        page.drawLine({ start: { x: item.x0, y: item.y }, end: { x: item.x1, y: item.y }, thickness: 1, color: rgb(...item.color.map(value => value / 255)) });
+        page.drawLine({ start: { x: item.x0, y: item.y }, end: { x: item.x1, y: item.y }, thickness: 1, lineCap: LineCapStyle.Projecting, color: rgb(...item.color.map(value => value / 255)) });
+      } else if (item.type === "polygon") {
+        const [first, ...rest] = item.points;
+        page.pushOperators(pushGraphicsState(), setFillingRgbColor(...item.color.map(value => value / 255)), moveTo(...first),
+          ...rest.map(point => lineTo(...point)), closePath(), fill(), popGraphicsState());
       } else if (item.type === "ellipse") {
         page.drawEllipse({ x: item.x, y: item.y, xScale: item.radius, yScale: item.radius, color: rgb(...item.color.map(value => value / 255)) });
-      } else if (item.type === "rect") {
-        page.drawRectangle({ x: item.x, y: item.y, width: item.width, height: item.height, borderWidth: 1, borderColor: rgb(0, 0, 0) });
+      } else if (item.type === "rect" || item.type === "segment") {
+        // Table borders with UYAP's border pen: width, cap, join, dash pattern and colour.
+        const { pen } = item;
+        page.pushOperators(
+          pushGraphicsState(), setLineWidth(pen.width), setLineCap(pen.cap), setLineJoin(pen.join), setDashPattern(pen.dash ?? [], 0),
+          setStrokingRgbColor(...pen.color.map(value => value / 255)),
+          ...(item.type === "rect" ? [rectangle(item.x, item.y, item.width, item.height)] : [moveTo(item.x0, item.y0), lineTo(item.x1, item.y1)]),
+          stroke(), popGraphicsState(),
+        );
       } else if (item.type === "image") {
         if (!images.has(item.image)) {
           // The original image bytes are embedded unchanged.

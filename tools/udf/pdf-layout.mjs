@@ -51,16 +51,22 @@ export async function readLayout(bytes) {
     let charSpacing = 0;
     let wordSpacing = 0;
     let color = "0,0,0";
+    // Stroke state: width, cap, dash pattern and colour.
+    let pen = { width: 1, cap: 0, dash: "", color: "0,0,0" };
     for (let index = 0; index < list.fnArray.length; index++) {
       const fn = list.fnArray[index];
       const args = list.argsArray[index];
       switch (fn) {
-        case OPS.save: stack.push({ matrix, color }); break;
-        case OPS.restore: ({ matrix, color } = stack.pop() ?? { matrix: identity, color }); break;
+        case OPS.save: stack.push({ matrix, color, pen }); break;
+        case OPS.restore: ({ matrix, color, pen } = stack.pop() ?? { matrix: identity, color, pen }); break;
         case OPS.transform: matrix = multiply(flat(args), matrix); break;
-        case OPS.paintFormXObjectBegin: stack.push({ matrix, color }); if (args?.[0]) matrix = multiply(args[0], matrix); break;
-        case OPS.paintFormXObjectEnd: ({ matrix, color } = stack.pop() ?? { matrix: identity, color }); break;
+        case OPS.paintFormXObjectBegin: stack.push({ matrix, color, pen }); if (args?.[0]) matrix = multiply(args[0], matrix); break;
+        case OPS.paintFormXObjectEnd: ({ matrix, color, pen } = stack.pop() ?? { matrix: identity, color, pen }); break;
         case OPS.setFillRGBColor: color = rgbOf(args); break;
+        case OPS.setStrokeRGBColor: pen = { ...pen, color: rgbOf(args) }; break;
+        case OPS.setLineWidth: pen = { ...pen, width: args[0] }; break;
+        case OPS.setLineCap: pen = { ...pen, cap: args[0] }; break;
+        case OPS.setDash: pen = { ...pen, dash: JSON.stringify([Array.from(args[0] ?? []), args[1] ?? 0]) === "[[],0]" ? "" : JSON.stringify([Array.from(args[0] ?? []), args[1] ?? 0]) }; break;
         case OPS.beginText: textMatrix = lineMatrix = identity; break;
         case OPS.setFont: fontSize = args[1]; break;
         case OPS.setCharSpacing: charSpacing = args[0]; break;
@@ -98,7 +104,8 @@ export async function readLayout(bytes) {
           const [paint, data, minMax] = args;
           if (!minMax || !Number.isFinite(minMax[0])) break;
           const box = bounds([[minMax[0], minMax[1]], [minMax[2], minMax[3]], [minMax[0], minMax[3]], [minMax[2], minMax[1]]].map(([x, y]) => apply(matrix, x, y)));
-          if (paint === OPS.stroke || paint === OPS.closeStroke) strokes.push(box);
+          // The pen width is scaled by the current transformation.
+          if (paint === OPS.stroke || paint === OPS.closeStroke) strokes.push({ ...box, width: pen.width * Math.hypot(matrix[0], matrix[1]), cap: pen.cap, dash: pen.dash, color: pen.color });
           else if (paint === OPS.fill || paint === OPS.eoFill || paint === OPS.fillStroke || paint === OPS.closeFillStroke) fills.push({ ...box, color });
           break;
         }

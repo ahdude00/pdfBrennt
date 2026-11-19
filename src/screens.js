@@ -1,5 +1,6 @@
 import { icon, escapeHtml, fileDetails, toolHeader } from "./ui.js";
 import { udfFontPresets } from "./udf-font-presets.js";
+import { bridgeDownloadUrl } from "./udf-bridge.js";
 
 const e = escapeHtml;
 
@@ -137,6 +138,18 @@ function udfFontSettings(view) {
   </div>`;
 }
 
+function udfBridgeBox(view) {
+  return `<div class="udf-bridge">
+    <h3>UYAP köprüsü</h3>
+    <p>Belge reddedildiyse veya sonuç beklediğiniz gibi değilse, dönüşümü bilgisayarınızdaki UYAP Editör’e yaptırabilirsiniz. Dosya bu bilgisayardan çıkmaz.</p>
+    <ol>
+      <li><a href="${e(bridgeDownloadUrl)}" download>Köprüyü indirin</a> ve çift tıklayarak açın. UYAP Editör ve Java kurulu olmalıdır.</li>
+      <li>Aşağıdaki düğmeye basın. Tarayıcı bu cihazdaki uygulamalara erişim izni isterse “İzin ver”i seçin.</li>
+    </ol>
+    <button class="button secondary" type="button" data-bridge ${!view.file || view.loading || view.busy ? "disabled" : ""}>UYAP köprüsüyle dönüştür</button>
+  </div>`;
+}
+
 export function convertScreen(view) {
   const image = view.kind === "image";
   const udf = view.kind === "udf";
@@ -150,7 +163,7 @@ export function convertScreen(view) {
       ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
-        <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, liste ve sekmeler desteklenir. Sayfa numarası, yatay sayfa veya biçimlendirilmiş tablo hücresi gibi henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir.</span></p>
+        <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, sayfa numarası, liste, sekme, vurgu ve yatay sayfa desteklenir. Henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir; bu belgeler için aşağıdaki UYAP köprüsünü kullanabilirsiniz.</span></p>
         ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "16 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
         ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
         ${udfFontSettings(view.udf)}
@@ -184,6 +197,7 @@ export function convertScreen(view) {
         <p class="panel-lead">Çıktıyı indirmeden önce inceleyebilirsiniz.</p>
         ${actionButton("udf", "PDF’ye dönüştür", active)}
         ${privacyNote()}
+        ${udfBridgeBox(active)}
       </aside>` : ""}
     </div>${image || udf ? resultPanel(active.result) : ""}`;
 }

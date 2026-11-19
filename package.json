@@ -12,9 +12,11 @@
     "preview": "vite preview",
     "udf:cases": "node tools/udf/cases.mjs",
     "udf:references": "node tools/udf/references.mjs",
+    "udf:outlines": "node tools/udf/outlines.mjs",
     "udf:metrics": "node tools/udf/metrics.mjs",
     "udf:rows": "node tools/udf/alignment.mjs",
-    "udf:compare": "node tools/udf/compare.mjs"
+    "udf:compare": "node tools/udf/compare.mjs",
+    "bridge:build": "node bridge/build.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",
