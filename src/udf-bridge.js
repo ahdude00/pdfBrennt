@@ -17,7 +17,7 @@ export class BridgeError extends Error {
 
 const unreachable = "UYAP köprüsüne bağlanılamadı. “Köprü hazır.” yazan pencere yoksa köprüyü İndirilenler klasöründen açın. UYAP’ın yeri sorulursa penceredeki adımları izleyin. Pencere açılmazsa “Köprü açılmıyorsa” bölümüne bakın. Köprü hazırsa sitede yeniden deneyin. Tarayıcı sorarsa “İzin ver”i seçin. Sorun sürerse “Erişim engellendiyse” bölümüne bakın.";
 const denied = "Köprüye erişim engellenmiş görünüyor. Adres çubuğunun solundaki site simgesine tıklayın. Site ayarlarında bu bilgisayardaki uygulamalara veya yerel ağa erişime izin verin. Sayfayı yenileyin, belgeyi yeniden seçin ve “UYAP köprüsüyle dönüştür”e tıklayın.";
-const conversionFailed = "Bu belge PDF’ye dönüştürülemedi. Belgeyi UYAP Doküman Editörü’nde açmayı deneyin. Açılırsa editörde PDF olarak kaydetmeyi deneyin. Açılmazsa belgenin yeni bir kopyasını edinin.";
+const conversionFailed = "UYAP Doküman Editörü bu belgeyi PDF’ye dönüştüremedi. Belgeyi UYAP Doküman Editörü’nde açmayı deneyin. Açılırsa editörde PDF olarak kaydedin. Açılmazsa belge büyük olasılıkla UYAP dışında bir programla hazırlanmıştır; belgeyi hazırlayan programla yeniden oluşturmayı deneyin.";
 
 async function permissionState() {
   // Only "loopback-network" is queried: older Chrome versions crash on other names.

@@ -241,6 +241,8 @@ async function loadFiles(key, files) {
               const { inspectUdfFonts } = await import("./udf-engine.js");
               attachment.fontRequirements = await inspectUdfFonts(file, view.defaultFontFamily);
             } catch (error) {
+              // UYAP Editör cannot open this document either, so the bridge is not offered.
+              if (error?.uyapCannotOpen) throw error;
               attachment.bridgeOnly = true;
               errors.push(`${error?.message || "Tarayıcı bu belgeyi açamadı."} “UYAP köprüsüyle dönüştür”ü deneyin.`);
             }

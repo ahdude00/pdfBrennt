@@ -51,7 +51,7 @@ Bağımsız tarayıcı motoru UDF 1.8 belgelerini kapsar. Kurallar, kullanıcın
 - **Listeler.** Altı düzey, 24 numara türü, 7 madde işareti, `NumberSetted`, `SecListTypeLevelN` ve `Hanging` UYAP’ın paragraf görünümüyle aynı kurallarla çizilir.
 - **Sayfa.** Kâğıt `mediaSizeName` ile seçilir; yatay sayfada kâğıt ve kenar boşlukları döner.
 
-`test/udf` altındaki 19 sentetik belgenin hepsi UYAP çıktısıyla konum, kalem ve renk düzeyinde aynıdır (0,02 pt eşik). `udfConvertor` projesindeki gerçek bir UYAP belgesinde 815 kelimenin ve 164 çizginin hepsi aynı konumdadır. Birebir çizilemeyen öğeler nedeni belirtilerek reddedilir; kullanıcı bu belgeler için UYAP köprüsünü kullanabilir. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim)
+`test/udf` altındaki 20 sentetik belgenin hepsi UYAP çıktısıyla konum, kalem ve renk düzeyinde aynıdır (0,02 pt eşik). `udfConvertor` projesindeki gerçek bir UYAP belgesinde 815 kelimenin ve 164 çizginin hepsi aynı konumdadır. Birebir çizilemeyen öğeler nedeni belirtilerek reddedilir; kullanıcı bu belgeler için UYAP köprüsünü kullanabilir. [UYAP Editör yardımı](https://uyap.gov.tr/Uyap-Editor-Yardim)
 
 ### Office denemesi
 

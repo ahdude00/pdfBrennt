@@ -273,6 +273,24 @@ cases["19-listeler"] = d => {
     d.paragraph({ Numbered: "true", ListId: "300" }, ["tablodan sonra"]),
   ]);
 };
+// Font sizes UYAP Editör cannot read with Integer.parseInt (decimals, spaces), as other
+// programs write them: UYAP ignores them and the text takes the paragraph's size, else
+// the default. "+9" is read.
+cases["20-okunamayan-boyut"] = d => d.build([
+  d.paragraph({}, [{ text: "Kalın on buçuk ", bold: "true", size: "10.5" }, { text: "on altı", size: "16" }]),
+  d.paragraph({ size: "18" }, [{ text: "Paragraf on sekiz, yazı on buçuk", size: "10.5" }]),
+  d.paragraph({ size: "13.5" }, ["Paragraf on üç buçuk, yazıda boyut yok"]),
+  d.paragraph({ size: "14" }, [{ text: "Boşluklu", size: " 12" }, { text: " on iki nokta sıfır", size: "12.0" }, { text: " artılı dokuz", size: "+9" }]),
+  d.paragraph({}, [{ text: "Sekme", size: "16" }, { tab: true, size: "20.5" }, { text: "sonrası", size: "16" }]),
+  d.paragraph({ Alignment: "3" }, [{ text: filler(2), size: "11.5" }]),
+  d.table({ tableName: "T", columnCount: "2", columnSpans: "1,1", border: "borderCell" }, [
+    d.row({ rowName: "r", rowType: "dataRow" }, [
+      d.cell({}, [d.paragraph({ size: "16" }, [{ text: "hücre on altı", size: "8.5" }])]),
+      d.cell({}, [d.paragraph({}, [{ text: "hücre on iki", size: "16.0" }])]),
+    ]),
+  ]),
+  d.footer({}, [d.paragraph({ Alignment: "1" }, [{ text: "Altbilgi", size: "9.5" }])]),
+]);
 const caseOptions = {
   "08-ustalt-kenar": { page: { leftMargin: "56.7", rightMargin: "56.7", topMargin: "70.9", bottomMargin: "35.4", headerFOffset: "28.4", footerFOffset: "17.0" } }, "06-kenar": { page: { leftMargin: "70.86614", rightMargin: "28.346457", topMargin: "56.692913", bottomMargin: "30.0" } } };
 

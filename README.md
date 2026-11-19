@@ -25,6 +25,8 @@ UYAP’ın ürettiği PDF’de yazılar başka bir bilgisayarda farklı görüne
 
 Dönüştürücü birebir çizemediği bir öğeyle karşılaşırsa eksik PDF üretmez, öğeyi adıyla belirterek belgeyi reddeder; bu durumda UYAP köprüsü kullanılabilir. Reddedilen öğeler şunlardır: Legal, Executive ve zarf kâğıtları, sayfa arka plan görseli, yalnızca bazı sayfalarda görünen ya da renkli veya çerçeveli üstbilgi ve altbilgi, alan (field) ve barkod öğeleri, negatif girinti, satıra sığmayan sözcük ve sekme, görselle başlayan liste paragrafı, `cellSpan`/`rowSpans` içeren tablolar.
 
+Başka programların ürettiği bazı UDF’leri UYAP Doküman Editörü’nün kendisi de açamaz. Örneğin tablo sütun genişliği tam sayı değilse (`columnSpans="35.95,…"`) UYAP tabloyu çizerken hata verir. Dönüştürücü bu belgeleri nedenini söyleyerek reddeder ve köprüyü önermez, çünkü köprü de aynı editörü kullanır. UYAP’ın okuyamadığı bir yazı boyutunu (`size="10.5"` gibi) ise UYAP gibi yok sayar: yazı paragrafın boyutunu, o da yoksa varsayılan boyutu alır.
+
 Yerleşim kuralları kurulu UYAP Editör’ün PDF dışa aktarımına karşı ölçüldü. `test/udf` klasöründeki sentetik belgeler her yayında UYAP referanslarıyla kelime kelime karşılaştırılır (`npm run udf:compare`). Ölçüm ve referans araçları [tools/udf](tools/udf/README.md) altındadır.
 
 Office dönüşümü geliştirme planında yer alır. Belgeleri [LibreOffice](https://help.libreoffice.org/latest/en-US/text/shared/01/ref_pdf_export.html) ile PDF olarak dışa aktarabilirsiniz.

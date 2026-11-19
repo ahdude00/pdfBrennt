@@ -1,7 +1,7 @@
 // Lays a parsed UDF out the way UYAP Editör does and returns positioned drawing
 // items per page. Coordinates are PDF points with the origin at the bottom left.
 // Every rule here was measured against UYAP Editör exports; see tools/udf.
-import { fail, number } from "./document.js";
+import { fail, number, readsAsJavaInt } from "./document.js";
 import { bulletShapes, markerKind, numberLabel } from "./lists.js";
 
 const defaultTab = 72;
@@ -74,9 +74,13 @@ function tabStops(value) {
   return stops;
 }
 
+// Paragraph and run sizes UYAP cannot read were dropped when the document was read;
+// a style's size is only taken as Integer.parseInt reads it.
 function sizeOf(style, fallback) {
-  const size = number(style.size, fallback, 1, 96);
-  if (!Number.isInteger(size)) fail();
+  if (style.size == null) return fallback;
+  if (!readsAsJavaInt(style.size)) fail();
+  const size = Number(style.size);
+  if (size < 1 || size > 96) fail();
   return size;
 }
 

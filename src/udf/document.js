@@ -9,10 +9,21 @@ const maxTextCharacters = 400000;
 const maxArchiveEntries = 16;
 export const unsupported = "Bu UDF, dönüştürücünün birebir çizebildiği düzenin dışında.";
 
-export class UdfError extends Error {}
+export class UdfError extends Error {
+  constructor(message, { uyapCannotOpen = false } = {}) {
+    super(message);
+    // Set when UYAP Editör itself cannot open the document, so the bridge cannot help.
+    this.uyapCannotOpen = uyapCannotOpen;
+  }
+}
 
 export function fail(message = unsupported) {
   throw new UdfError(message);
+}
+
+function failUnopenable(reason) {
+  throw new UdfError(`Bu belge UYAP Doküman Editörü’nde de açılmıyor: ${reason}. Belge büyük olasılıkla UYAP dışında bir programla hazırlanmış, `
+    + "bu yüzden UYAP köprüsü de dönüştüremez. Belgeyi hazırlayan programla yeniden oluşturmayı deneyin.", { uyapCannotOpen: true });
 }
 
 export const formatFields = ["family", "size", "bold", "italic", "underline", "foreground", "background", "strikethrough", "subscript", "superscript"];
@@ -47,13 +58,50 @@ function javaLong(value) {
   return result;
 }
 
+// Whether Integer.parseInt reads the value: an optional sign and decimal digits within
+// the int range, nothing around them.
+export function readsAsJavaInt(value) {
+  if (!/^[+-]?\d+$/u.test(value)) return false;
+  const result = Number(value);
+  return result >= -2147483648 && result <= 2147483647;
+}
+
+// Java's parseInt also reads the digits of other scripts. Such values are refused
+// rather than guessed.
+const otherDigits = /^[+-]?\p{Nd}+$/u;
+
 // Integer.parseInt: an optional sign and decimal digits within the int range.
 export function javaInt(value, fallback) {
   if (value == null) return fallback;
-  if (!/^[+-]?\d+$/u.test(value)) fail();
-  const result = Number(value);
-  if (result < -2147483648 || result > 2147483647) fail();
-  return result;
+  if (!readsAsJavaInt(value)) fail();
+  return Number(value);
+}
+
+// UYAP Editör reads a font size with Integer.parseInt (JDOM's getIntValue, without
+// trimming) and ignores a size it cannot read. The text then takes the paragraph's
+// size, or else the default one.
+function readableSize(values) {
+  if (values.size == null || readsAsJavaInt(values.size)) return values;
+  if (otherDigits.test(values.size)) fail();
+  const { size, ...rest } = values;
+  return rest;
+}
+
+// UYAP Editör splits columnSpans at commas with a StringTokenizer, which skips empty
+// parts, and reads each part with new Integer(). A part it cannot read throws while
+// the table is laid out, so UYAP cannot open the document at all.
+function spanParts(value) {
+  return (value ?? "").split(",").filter(part => part !== "");
+}
+
+function checkSpansUyapCanRead(element) {
+  for (const child of element.children) {
+    if ((child.name === "table" || child.name === "row") && child.attributes.columnSpans != null) {
+      const unreadable = spanParts(child.attributes.columnSpans).find(part => !readsAsJavaInt(part) && !otherDigits.test(part));
+      if (unreadable != null) failUnopenable(`bir tablo sütun genişliği UYAP’ın okuyabildiği bir tam sayı değil (“${unreadable}”)`);
+    }
+    checkSpansUyapCanRead(child);
+  }
 }
 
 function children(element, name) {
@@ -116,6 +164,8 @@ export function parseUdf(bytes) {
   const { source, signed } = readPackage(bytes);
   const root = parseXml(source, fail);
   if (root.name !== "template" || attributes(root, ["format_id"]).format_id !== "1.8") fail();
+  // Checked before anything else: when UYAP cannot open the document, that is the reason to give.
+  for (const section of children(root, "elements")) checkSpansUyapCanRead(section);
   const sections = ["content", "properties", "styles", "elements"];
   if (root.children.some(child => !sections.includes(child.name))) fail();
   const textElement = single(root, "content");
@@ -180,7 +230,7 @@ export function parseUdf(bytes) {
   }
 
   function readParagraph(element) {
-    const fields = attributes(element, ["resolver", "description", ...formatFields, ...paragraphFields]);
+    const fields = readableSize(attributes(element, ["resolver", "description", ...formatFields, ...paragraphFields]));
     const list = readList(fields);
     const settings = { ...defaults, ...resolve(fields.resolver), ...fields };
     const runs = [];
@@ -199,7 +249,7 @@ export function parseUdf(bytes) {
       cover(start, length);
       const value = text.slice(start, start + length);
       const { imageData, width, height, startOffset, length: ignoredLength, resolver: runResolver, description, ...format } = values;
-      const style = { ...settings, ...resolve(runResolver), ...format };
+      const style = { ...settings, ...resolve(runResolver), ...readableSize(format) };
       if (isImage) {
         if (length !== 1 || !imageData) fail();
         const bytes = decodeBase64(imageData);
@@ -328,7 +378,8 @@ export function parseUdf(bytes) {
   }
 
   function readSpans(value, count) {
-    const spans = (value ?? "").split(",").map(part => number(part, NaN, 0.01, 100000));
+    const spans = spanParts(value).map(part => javaInt(part));
+    if (!spans.length || spans.some(span => span < 1 || span > 100000)) fail();
     if (count != null && spans.length !== count) fail();
     return spans;
   }
