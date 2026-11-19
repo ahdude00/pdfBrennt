@@ -1,6 +1,7 @@
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.awt.BorderLayout;
+import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -16,6 +17,7 @@ import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,12 +33,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -57,6 +61,8 @@ public final class PdfBrenntKopru {
   static final String TRAY_CLASS = "tr.com.havelsan.uyap.system.editor.utils.tray.TrayUtils";
   static final String JAR_NAME = "editor-app.jar";
   static final String WINDOWS_EDITOR_DIR = "C:\\UYAP\\Uyap Kelime Islemci";
+  // The product code of UYAP Kelime İşlemci's installer, the key of its uninstall entry.
+  static final String PRODUCT_CODE = "6E100DF3-EFB2-449A-9334-1B9CAB8CBCBF";
   static final String WINDOW_TITLE = "PDF Brennt köprüsü";
   static final File SETTINGS = new File(System.getProperty("user.home"), ".pdfbrennt-kopru.properties");
 
@@ -77,6 +83,8 @@ public final class PdfBrenntKopru {
     return thread;
   });
   static JLabel countLabel;
+  // The folders the bridge looked in, shown when UYAP Editör is not found.
+  static final Set<String> searched = new LinkedHashSet<String>();
 
   public static void main(String[] args) throws Exception {
     // UYAP Editör starts its JVM with these settings; they affect text measurement.
@@ -136,7 +144,12 @@ public final class PdfBrenntKopru {
     remember(editorJar);
     String message = "PDF Brennt köprüsü çalışıyor: http://127.0.0.1:" + port + "  UYAP Editör: " + editorJar;
     if (console) System.out.println(message);
-    else showWindow();
+    else showWindow(folderOf(editorJar));
+  }
+
+  static File folderOf(File jar) {
+    File folder = jar.getAbsoluteFile().getParentFile();
+    return folder == null ? jar.getAbsoluteFile() : folder;
   }
 
   // ---- UYAP Editör ----------------------------------------------------------------
@@ -146,8 +159,12 @@ public final class PdfBrenntKopru {
     if (argument != null && !argument.trim().isEmpty()) candidates.add(new File(argument.trim()));
     String saved = savedJar();
     if (saved != null) candidates.add(new File(saved));
+    for (File folder : installedFolders()) candidates.add(new File(folder, JAR_NAME));
     candidates.add(new File(WINDOWS_EDITOR_DIR + "\\" + JAR_NAME));
-    for (File candidate : candidates) if (candidate.isFile()) return candidate;
+    for (File candidate : candidates) {
+      searched.add(folderOf(candidate).getPath());
+      if (candidate.isFile()) return candidate;
+    }
     List<File> roots = new ArrayList<File>();
     for (String variable : new String[] {"ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"}) {
       String value = System.getenv(variable);
@@ -169,6 +186,51 @@ public final class PdfBrenntKopru {
     return null;
   }
 
+  // UYAP Kelime İşlemci's installer records its folder as the InstallLocation of its
+  // uninstall entry ("Uyap Kelime İşlemci …" or its product code). reg.exe prints in the
+  // console code page, so the output is read in the code pages a Turkish Windows may use;
+  // only folders that exist are kept.
+  static List<File> installedFolders() {
+    Set<File> folders = new LinkedHashSet<File>();
+    if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) return new ArrayList<File>(folders);
+    for (String key : new String[] {"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"}) {
+      byte[] output;
+      try {
+        Process process = new ProcessBuilder("reg", "query", key, "/s", "/v", "InstallLocation").redirectErrorStream(true).start();
+        process.getOutputStream().close();
+        output = readAll(process.getInputStream());
+        process.waitFor(10, TimeUnit.SECONDS);
+      } catch (Exception error) {
+        continue;
+      }
+      for (String name : new String[] {"IBM857", "windows-1254", "UTF-8"}) {
+        if (!Charset.isSupported(name)) continue;
+        String entry = "";
+        for (String line : new String(output, Charset.forName(name)).split("\r?\n")) {
+          if (line.startsWith("HKEY_")) entry = line;
+          int type = line.indexOf("REG_SZ");
+          if (type < 0 || !line.trim().startsWith("InstallLocation")) continue;
+          String value = line.substring(type + "REG_SZ".length()).trim();
+          String about = (entry + " " + value).toLowerCase(new Locale("tr"));
+          if (value.isEmpty() || !(about.contains("uyap") || about.contains(PRODUCT_CODE.toLowerCase(Locale.ROOT)))) continue;
+          File folder = new File(value);
+          if (folder.isDirectory()) folders.add(folder);
+        }
+      }
+    }
+    return new ArrayList<File>(folders);
+  }
+
+  static byte[] readAll(InputStream input) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    int read;
+    while ((read = input.read(buffer)) > 0) output.write(buffer, 0, read);
+    return output.toByteArray();
+  }
+
   static File search(File directory, int depth) {
     File direct = new File(directory, JAR_NAME);
     if (direct.isFile()) return direct;
@@ -184,7 +246,7 @@ public final class PdfBrenntKopru {
   }
 
   static File prepareEditor(File jar) {
-    String message = "UYAP Doküman Editörü bulunamadı.";
+    String problem = notFoundMessage();
     while (true) {
       if (jar != null) {
         try {
@@ -192,30 +254,49 @@ public final class PdfBrenntKopru {
           return jar;
         } catch (Exception | LinkageError error) {
           error.printStackTrace();
-          message = "Seçilen UYAP dosyası açılamadı.\nUYAP Doküman Editörü'nü açıp çalıştığını kontrol edin.";
+          problem = "Seçilen dosya açılamadı:\n    " + jar.getAbsolutePath() + "\n"
+              + "Bu dosya UYAP Doküman Editörü'nün editor-app.jar dosyası olmayabilir.\n"
+              + "UYAP Doküman Editörü'nü açıp çalıştığını da kontrol edin.";
         }
       }
-      jar = chooseJar(message);
+      jar = chooseJar(problem);
       if (jar == null) return null;
     }
   }
 
-  static File chooseJar(String message) {
-    String instructions = message + "\n\n"
-        + "1. Dosya seç düğmesine basın. Windows'ta önce şu klasöre bakın.\n"
-        + "    " + WINDOWS_EDITOR_DIR + "\n"
-        + "2. editor-app.jar dosyasını seçip Seç düğmesine basın. “Köprü hazır.” yazısını bekleyin.\n"
-        + "3. Dosyayı göremezseniz Dosya Gezgini'nde editor-app.jar adını aratın.\n"
-        + "    Bulduğunuz UYAP klasörünü dosya seçme penceresinde açıp dosyayı seçin.\n"
-        + "    UYAP kurulu değilse köprü penceresini kapatın. UYAP'ı kurup köprüyü yeniden açın.";
+  // Says where the bridge looked and how to find the editor's folder by hand.
+  static String notFoundMessage() {
+    StringBuilder text = new StringBuilder("UYAP Doküman Editörü bu bilgisayarda bulunamadı.\n\nKöprü şu klasörlere baktı:\n");
+    for (String folder : searched) text.append("    • ").append(folder).append('\n');
+    text.append("    • Program Files, Program Files (x86), AppData\\Local ve disklerin kökünde adında “UYAP” geçen klasörler\n");
+    return text.toString();
+  }
+
+  static File chooseJar(String problem) {
     Object[] options = {"Dosya seç", "Vazgeç"};
-    if (JOptionPane.showOptionDialog(null, instructions, WINDOW_TITLE, JOptionPane.DEFAULT_OPTION,
+    if (JOptionPane.showOptionDialog(null, findHelp(problem), WINDOW_TITLE, JOptionPane.DEFAULT_OPTION,
         JOptionPane.INFORMATION_MESSAGE, null, options, options[0]) != 0) return null;
 
-    JFileChooser chooser = new JFileChooser(new File(WINDOWS_EDITOR_DIR));
+    File start = new File(WINDOWS_EDITOR_DIR);
+    for (File folder : installedFolders()) if (!start.isDirectory()) start = folder;
+    JFileChooser chooser = new JFileChooser(start.isDirectory() ? start : null);
     chooser.setDialogTitle("UYAP dosyasını seçin");
     chooser.setFileFilter(new FileNameExtensionFilter("UYAP dosyası (*.jar)", "jar"));
     return chooser.showDialog(null, "Seç") == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
+  }
+
+  static String findHelp(String problem) {
+    return problem + "\n"
+        + "UYAP Doküman Editörü genellikle şu klasöre kurulur:\n"
+        + "    " + WINDOWS_EDITOR_DIR + "\n"
+        + "Bu klasörde editor-app.jar adlı bir dosya bulunur.\n\n"
+        + "Başka bir yere kurulduysa yerini şöyle bulabilirsiniz:\n"
+        + "  1. Klavyede Windows + E tuşlarına basın. Soldan “Bu bilgisayar”ı seçin.\n"
+        + "  2. Sağ üstteki arama kutusuna editor-app.jar yazıp Enter'a basın.\n"
+        + "  3. Bulunan dosyaya sağ tıklayıp “Dosya konumunu aç”ı seçin. Açılan klasör UYAP'ın klasörüdür.\n"
+        + "Sonra aşağıdaki Dosya seç düğmesine basın, o klasördeki editor-app.jar dosyasını seçip Seç'e basın.\n\n"
+        + "Arama hiçbir şey bulmazsa UYAP Doküman Editörü bu bilgisayarda kurulu değildir.\n"
+        + "Önce UYAP Doküman Editörü'nü kurun (uyap.gov.tr), sonra köprüyü yeniden açın.";
   }
 
   static String savedJar() {
@@ -373,12 +454,41 @@ public final class PdfBrenntKopru {
 
   // ---- Window -----------------------------------------------------------------------
 
-  static void showWindow() {
+  static void showWindow(final File folder) {
     JFrame frame = new JFrame(WINDOW_TITLE);
     frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-    JPanel content = new JPanel(new BorderLayout(0, 8));
+    JPanel content = new JPanel(new BorderLayout(0, 10));
     content.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
-    content.add(new JLabel("<html><b>Köprü hazır.</b><br><br>"
+
+    // Where UYAP Doküman Editörü was found; the path can be selected and copied.
+    JPanel found = new JPanel();
+    found.setLayout(new BoxLayout(found, BoxLayout.Y_AXIS));
+    JLabel ready = new JLabel("<html><b>Köprü hazır.</b> UYAP Doküman Editörü bu klasörde bulundu:</html>");
+    ready.setAlignmentX(0f);
+    found.add(ready);
+    JPanel pathRow = new JPanel(new BorderLayout(8, 0));
+    pathRow.setAlignmentX(0f);
+    pathRow.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+    JTextField path = new JTextField(folder.getPath());
+    path.setEditable(false);
+    path.setColumns(Math.min(48, Math.max(28, folder.getPath().length() + 2)));
+    pathRow.add(path, BorderLayout.CENTER);
+    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+      JButton open = new JButton("Klasörü aç");
+      open.addActionListener(event -> {
+        try {
+          Desktop.getDesktop().open(folder);
+        } catch (Exception error) {
+          JOptionPane.showMessageDialog(frame, "Klasör açılamadı. Yolu yukarıdaki kutudan kopyalayıp Dosya Gezgini'ne yapıştırabilirsiniz.",
+              WINDOW_TITLE, JOptionPane.INFORMATION_MESSAGE);
+        }
+      });
+      pathRow.add(open, BorderLayout.EAST);
+    }
+    found.add(pathRow);
+    content.add(found, BorderLayout.NORTH);
+
+    content.add(new JLabel("<html>"
         + "1. PDF Brennt sitesine dönün ve belgenizi seçin.<br>"
         + "2. <b>UYAP köprüsüyle dönüştür</b> düğmesine basın.<br>"
         + "3. PDF hazır olana kadar bu pencereyi açık tutun.<br>"

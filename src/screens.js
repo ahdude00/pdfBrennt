@@ -166,7 +166,7 @@ function udfBridgeBox(view) {
       </li>
       <li>
         <strong>Köprüyü açın</strong>
-        <p>İndirdiğiniz dosyaya çift tıklayın. <strong>PDF Brennt köprüsü</strong> penceresinde <strong>“Köprü hazır.”</strong> yazısını bekleyin.</p>
+        <p>İndirdiğiniz dosyaya çift tıklayın. <strong>PDF Brennt köprüsü</strong> penceresinde <strong>“Köprü hazır.”</strong> yazısını bekleyin. Pencerede UYAP Doküman Editörü’nün bulunduğu klasör de yazar.</p>
         <details>
           <summary>Köprü açılmıyorsa</summary>
           <p>Windows dosyayı hangi programla açacağınızı sorarsa, listede Java varsa onu seçin. Java, UYAP Doküman Editörü’nü çalıştıran programdır.</p>
@@ -180,12 +180,15 @@ function udfBridgeBox(view) {
           <p>Siyah pencerede dosyanın bulunamadığı yazıyorsa klasörü ve dosya adını kontrol edin. Java bulunamadıysa Başlat menüsünden UYAP Doküman Editörü’nü açmayı deneyin. Editör de açılmazsa UYAP kurulumunu tamamlayıp tekrar deneyin.</p>
         </details>
         <details>
-          <summary>Köprü UYAP’ın yerini sorarsa</summary>
+          <summary>Köprü UYAP’ı bulamazsa</summary>
+          <p>Köprü UYAP Doküman Editörü’nü kendisi arar. Bulamazsa hangi klasörlere baktığını yazar. Editör genellikle <code>C:\\UYAP\\Uyap Kelime Islemci</code> klasörüne kurulur.</p>
           <ol>
-            <li>Köprü penceresinde <strong>Dosya seç</strong> düğmesine basın. Açılan pencerede <code>C:\\UYAP\\Uyap Kelime Islemci</code> klasörüne bakın.</li>
-            <li><code>editor-app.jar</code> dosyasına tıklayıp <strong>Seç</strong> düğmesine basın. Bu dosya UYAP Doküman Editörü’nün bir parçasıdır.</li>
-            <li>Dosya orada yoksa Dosya Gezgini’nde <strong>Bu bilgisayar</strong>’ı açın. Üstteki arama kutusuna <code>editor-app.jar</code> yazın. Bulduğunuz UYAP klasörünü köprünün dosya seçme penceresinde açıp dosyayı seçin. <strong>“Köprü hazır.”</strong> yazısını bekleyin.</li>
+            <li>Klavyede <kbd>Windows</kbd> + <kbd>E</kbd> tuşlarına basın. Soldan <strong>Bu bilgisayar</strong>’ı seçin.</li>
+            <li>Sağ üstteki arama kutusuna <code>editor-app.jar</code> yazıp <kbd>Enter</kbd>’a basın.</li>
+            <li>Bulunan dosyaya sağ tıklayıp <strong>Dosya konumunu aç</strong>’ı seçin. Açılan klasör UYAP’ın klasörüdür.</li>
+            <li>Köprü penceresinde <strong>Dosya seç</strong> düğmesine basın. O klasördeki <code>editor-app.jar</code> dosyasını seçip <strong>Seç</strong>’e basın. <strong>“Köprü hazır.”</strong> yazısını bekleyin.</li>
           </ol>
+          <p>Arama hiçbir şey bulmazsa UYAP Doküman Editörü bu bilgisayarda kurulu değildir. Önce editörü kurun, sonra köprüyü yeniden açın.</p>
         </details>
       </li>
       <li>
