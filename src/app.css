@@ -22,6 +22,8 @@
 .result .notice { margin-top: 10px; }
 .document-notice { margin-top: 12px; }
 .udf-notice { margin-bottom: 12px; }
+.udf-output { margin: 12px 0 0; }
+.udf-bridge-only { margin-top: 12px; }
 .udf-font-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .udf-font-default { margin: 4px 0 6px; }
 .udf-font-default select { width: min(100%, 15rem); }

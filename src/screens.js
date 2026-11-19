@@ -14,7 +14,7 @@ function uploadZone(id, label, detail, accept, multiple = false) {
 }
 
 function status(view) {
-  if (view.busy) return '<p class="operation-status" role="status">İşlem sürüyor…</p>';
+  if (view.busy) return `<p class="operation-status" role="status">İşlem sürüyor…${view.progress ? ` ${e(view.progress)}` : ""}</p>`;
   if (view.loading) return '<p class="operation-status" role="status">Dosyalar okunuyor…</p>';
   return view.problem ? `<p class="problem" role="alert">${e(view.problem)}</p>` : "";
 }
@@ -31,7 +31,7 @@ function rowButton(action, file, name, glyph, disabled = false) {
 
 function sortableRow(file, index, view, rangeOptions = false) {
   const tag = file.format === "JPEG" ? "JPG" : file.format;
-  const color = rangeOptions ? "" : "teal";
+  const color = rangeOptions ? "" : file.format === "UDF" ? "amber" : "teal";
   const range = rangeOptions ? `<div class="range-row">
     <label for="mode-${file.id}">Sayfalar</label>
     <select class="control" id="mode-${file.id}" data-merge-mode="${file.id}" aria-label="${e(file.name)} sayfa seçimi">
@@ -109,8 +109,20 @@ function convertHelp() {
 
 const udfFaceLabels = { regular: "Normal", bold: "Kalın", italic: "İtalik", boldItalic: "Kalın italik" };
 
+// The font families and faces that all selected documents use, each family once.
+function udfFontRequirements(files) {
+  const merged = new Map();
+  for (const { family, faces } of files.flatMap(file => file.fontRequirements ?? [])) {
+    const key = family.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
+    const entry = merged.get(key) ?? { family, faces: [] };
+    for (const face of faces) if (!entry.faces.includes(face)) entry.faces.push(face);
+    merged.set(key, entry);
+  }
+  return [...merged.values()];
+}
+
 function udfFontSettings(view) {
-  const required = view.file?.fontRequirements ?? [];
+  const required = udfFontRequirements(view.files);
   const supplied = Array.from(view.fonts.values());
   return `<div class="setting-box udf-font-settings">
     <div class="udf-font-heading">
@@ -124,7 +136,7 @@ function udfFontSettings(view) {
       </select>
     </label>
     <p id="udf-font-default-help">Belgede yazı tipi belirtilmediğinde kullanılır.</p>
-    ${required.length ? `<ul class="udf-font-list" aria-label="Belgede kullanılan yazı tipleri">${required.map(({ family, faces }) =>
+    ${required.length ? `<ul class="udf-font-list" aria-label="${view.files.length > 1 ? "Belgelerde" : "Belgede"} kullanılan yazı tipleri">${required.map(({ family, faces }) =>
       `<li><strong>${e(family)}</strong><span>${faces.map(face => udfFaceLabels[face]).join(", ")}</span></li>`).join("")}</ul>` : ""}
     <p>Kaynak belgede kullanılan yazı tiplerinin TTF dosyalarını ekleyin. Kalın ve italik biçimler ayrı dosyalar olabilir.</p>
     <label class="drop-zone udf-font-picker" for="udf-font-input">
@@ -190,9 +202,32 @@ function udfBridgeBox(view) {
         <p><strong>Dosyanız hazır</strong> yazısını gördüğünüzde <strong>PDF’yi indir</strong> düğmesine basın. Bir hata görürseniz ekrandaki adımı izleyin. İşiniz bitince köprü penceresindeki <strong>Köprüyü kapat</strong> düğmesine basın.</p>
       </li>
     </ol>
-    <button class="button secondary" type="button" data-bridge ${!view.file || view.loading || view.busy ? "disabled" : ""}>UYAP köprüsüyle dönüştür</button>
+    <button class="button secondary" type="button" data-bridge ${!view.files.length || view.loading || view.busy ? "disabled" : ""}>UYAP köprüsüyle dönüştür</button>
     <p class="udf-bridge-repeat"><strong>Sonraki kullanımda</strong> İndirilenler’deki köprüyü yeniden açın, sitede belgenizi seçin ve dönüştürün. Aynı dosyayı tekrar indirmeniz gerekmez.</p>
   </section>`;
+}
+
+// Output choice and summary for the selected UDF files.
+function udfOutputSettings(view) {
+  const count = view.files.length;
+  const merged = count > 1 && view.output === "merged";
+  const bridgeOnly = view.files.filter(file => file.bridgeOnly).length;
+  const output = !count ? "—" : count === 1 ? "PDF" : merged ? "Tek PDF" : `${count} PDF · ZIP`;
+  const bridgeNote = bridgeOnly === count
+    ? `${count > 1 ? "Bu belgeler" : "Bu belge"} tarayıcıda dönüştürülemiyor. Aşağıdaki UYAP köprüsünü kullanın.`
+    : `${bridgeOnly} belge tarayıcıda dönüştürülemiyor. ${bridgeOnly > 1 ? "Bu belgeleri" : "Bu belgeyi"} listeden çıkarın ya da tümünü aşağıdaki UYAP köprüsüyle dönüştürün.`;
+  return `${count > 1 ? `<div class="mode-options udf-output" role="group" aria-label="Çıktı biçimi">
+      ${modeButton("udf-output", "separate", "Ayrı PDF’ler (ZIP)", view.output)}
+      ${modeButton("udf-output", "merged", "Tek PDF’de birleştir", view.output)}
+    </div>` : ""}
+    <dl aria-live="polite">
+      <div><dt>Belge sayısı</dt><dd>${count ? `${count} UDF` : "—"}</dd></div>
+      <div><dt>Çıktı</dt><dd>${output}</dd></div>
+    </dl>
+    ${merged ? '<p class="panel-lead">Belgeler listedeki sırayla tek PDF’de birleştirilir.</p>' : ""}
+    ${count > 1 && !merged ? '<p class="panel-lead">Her belge kendi adıyla ayrı bir PDF olur ve hepsi tek ZIP dosyasında iner.</p>' : ""}
+    ${count <= 1 || merged ? '<p class="panel-lead">Çıktıyı indirmeden önce inceleyebilirsiniz.</p>' : ""}
+    ${bridgeOnly ? `<p class="notice udf-bridge-only">${icon("info", 17)}<span>${bridgeNote}</span></p>` : ""}`;
 }
 
 export function convertScreen(view) {
@@ -209,20 +244,21 @@ export function convertScreen(view) {
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
         <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, sayfa numarası, liste, sekme, vurgu ve yatay sayfa desteklenir. Henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir; bu belgeler için aşağıdaki UYAP köprüsünü kullanabilirsiniz.</span></p>
-        ${uploadZone("udf-input", view.udf.file ? "Başka UDF seç" : "UDF seç", "16 MB’a kadar bir UDF seçin ya da buraya sürükleyin.", ".udf")}
-        ${view.udf.file ? `<div class="file-row row-top">${fileDetails(view.udf.file, "UDF", "amber")}</div>` : ""}
-        ${view.udf.file?.bridgeOnly ? "" : udfFontSettings(view.udf)}
+        ${uploadZone("udf-input", view.udf.files.length ? "UDF ekle" : "UDF seç", "Bir veya daha fazla UDF seçin ya da buraya sürükleyin. Her biri en çok 16 MB olabilir.", ".udf", true)}
+        ${view.udf.files.length ? `<ol class="file-list">${view.udf.files.map((file, index) => sortableRow(file, index, view.udf)).join("")}</ol>` : ""}
+        ${view.udf.files.length && view.udf.files.every(file => file.bridgeOnly) ? "" : udfFontSettings(view.udf)}
       ` : convertHelp()}`;
   const description = image
     ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur."
-    : udf ? "Bir UYAP belgesini cihazınızda PDF’ye dönüştürün." : "Office belgelerini PDF olarak dışa aktarma seçeneklerini görün.";
+    : udf ? "UYAP belgelerini cihazınızda PDF’ye dönüştürün. Birden çok belgeyi ayrı PDF’lere ya da tek PDF’ye çevirebilirsiniz."
+    : "Office belgelerini PDF olarak dışa aktarma seçeneklerini görün.";
   return `${toolHeader("donustur", description)}
     <div class="workspace">
       <section class="panel" aria-labelledby="source-heading">
         <div class="panel-title">
-          <div><h2 id="source-heading">Kaynak dosyalar</h2><p class="panel-lead">${image ? "Dosya türünü seçin. Birden çok görseli sıralayabilirsiniz." : "Dosya türünü seçin."}</p></div>
-          ${image && view.files.length ? `<button type="button" class="text-button" data-clear ${view.loading || view.busy ? "disabled" : ""}>Tümünü kaldır</button>` : ""}
-          ${udf && view.udf.file ? `<button type="button" class="text-button" data-clear ${active.loading || active.busy ? "disabled" : ""}>Dosyayı kaldır</button>` : ""}
+          <div><h2 id="source-heading">Kaynak dosyalar</h2><p class="panel-lead">${image ? "Dosya türünü seçin. Birden çok görseli sıralayabilirsiniz."
+            : udf ? "Dosya türünü seçin. Birden çok belgeyi sürükleyerek veya oklarla sıralayabilirsiniz." : "Dosya türünü seçin."}</p></div>
+          ${(image || udf) && active.files.length ? `<button type="button" class="text-button" data-clear ${active.loading || active.busy ? "disabled" : ""}>Tümünü kaldır</button>` : ""}
         </div>
         ${progressOrFiles(active, source)}
       </section>
@@ -239,7 +275,7 @@ export function convertScreen(view) {
         ${privacyNote()}
       </aside>` : udf ? `<aside class="panel summary" aria-labelledby="preview-heading">
         <h2 id="preview-heading">UDF’den PDF’ye</h2>
-        <p class="panel-lead">Çıktıyı indirmeden önce inceleyebilirsiniz.</p>
+        ${udfOutputSettings(active)}
         ${actionButton("udf", "PDF’ye dönüştür", active)}
         ${privacyNote()}
         ${udfBridgeBox(active)}

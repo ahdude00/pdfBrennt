@@ -1,4 +1,5 @@
 // Browser entry for UDF conversion. The conversion itself lives in ./udf/convert.js.
+import { zipSync } from "fflate";
 import { convertUdf, inspectUdf } from "./udf/convert.js";
 import { defaultUdfFontFamily } from "./udf-font-presets.js";
 import regularUrl from "./udf-fonts/LiberationSerif-Regular.ttf?url";
@@ -38,4 +39,9 @@ export async function inspectUdfFonts(file, defaultFontFamily = defaultUdfFontFa
 
 export async function udfToPdf(file, customFonts = new Map(), defaultFontFamily = defaultUdfFontFamily) {
   return convertUdf(await readFile(file), { customFonts, defaultFamily: defaultFontFamily, loadFallbackFont });
+}
+
+// Several converted PDFs in one ZIP. PDF streams are already compressed.
+export function zipFiles(entries) {
+  return zipSync(entries, { level: 0 });
 }

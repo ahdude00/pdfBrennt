@@ -13,9 +13,11 @@ const state = {
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
   convert: {
     files: [], kind: "image", size: "original",
-    udf: { file: null, fonts: new Map(), defaultFontFamily: defaultUdfFontFamily },
+    // output: "separate" gives one PDF per UDF (a ZIP when there are several), "merged" one PDF.
+    udf: { files: [], output: "separate", fonts: new Map(), defaultFontFamily: defaultUdfFontFamily },
   },
 };
+const maxUdfFiles = 50;
 const routes = {
   araclar: { key: "home", screen: home },
   birlestir: { key: "merge", screen: mergeScreen },
@@ -152,8 +154,8 @@ function render() {
     app.querySelector("#convert-action").disabled = Boolean(view.busy || view.loading || !view.files.length);
   }
   if (key === "convert" && view.kind === "udf") {
-    const { file, busy, loading } = view.udf;
-    app.querySelector("#udf-action").disabled = Boolean(busy || loading || !file || file.bridgeOnly);
+    const { files, busy, loading } = view.udf;
+    app.querySelector("#udf-action").disabled = Boolean(busy || loading || !files.length || files.some(file => file.bridgeOnly));
     const fontDefault = app.querySelector("#udf-font-default");
     if (fontDefault) fontDefault.disabled = Boolean(busy || loading);
   }
@@ -213,11 +215,8 @@ async function loadFiles(key, files) {
   const view = toolView(key);
   if (!files.length || view.loading || view.busy || (key === "convert" && state.convert.kind === "office")) return;
   const udf = view === state.convert.udf;
-  const single = udf || key === "split";
-  if (udf) {
-    discardResult(view);
-    view.file = null;
-  }
+  const single = key === "split";
+  if (udf) discardResult(view);
   view.loading = true;
   view.problem = "";
   renderActive(key);
@@ -236,6 +235,7 @@ async function loadFiles(key, files) {
         if (key === "convert") {
           attachment.kind = fileSizeLabel(file.size);
           if (udf) {
+            if (view.files.length >= maxUdfFiles) throw new Error(`En fazla ${maxUdfFiles} UDF birlikte dönüştürülebilir.`);
             if (!file.size || file.size > bridgeFileSizeLimit) throw new Error("16 MB veya daha küçük, geçerli bir UDF seçin.");
             try {
               const { inspectUdfFonts } = await import("./udf-engine.js");
@@ -244,10 +244,11 @@ async function loadFiles(key, files) {
               // UYAP Editör cannot open this document either, so the bridge is not offered.
               if (error?.uyapCannotOpen) throw error;
               attachment.bridgeOnly = true;
-              errors.push(`${error?.message || "Tarayıcı bu belgeyi açamadı."} “UYAP köprüsüyle dönüştür”ü deneyin.`);
+              attachment.kind = `${attachment.kind} · yalnızca UYAP köprüsüyle`;
+              errors.push(`${file.name} · ${error?.message || "Tarayıcı bu belgeyi açamadı."} “UYAP köprüsüyle dönüştür”ü deneyin.`);
             }
-            view.file = attachment;
-          } else view.files.push(attachment);
+          }
+          view.files.push(attachment);
         } else {
           const { pageCount, hasDigitalSignature } = await runPdfOperation("inspectPdf", file);
           Object.assign(attachment, { pages: pageCount, hasDigitalSignature, mode: "all", range: "" });
@@ -265,7 +266,7 @@ async function loadFiles(key, files) {
         errors.push(message.startsWith(`${file.name} `) ? message : `${file.name} · ${message}`);
       }
     }
-    if (single && files.length > 1) errors.push(udf ? "Bir UDF dosyası seçebilirsiniz." : "Ayırma için bir PDF seçebilirsiniz.");
+    if (single && files.length > 1) errors.push("Ayırma için bir PDF seçebilirsiniz.");
     view.problem = errors.slice(0, 3).join(" ") + (errors.length > 3 ? ` Diğer ${errors.length - 3} dosya da eklenemedi.` : "");
   } finally {
     view.loading = false;
@@ -283,7 +284,8 @@ async function selectUdfDefaultFont(select) {
     return;
   }
   if (family === view.defaultFontFamily) return;
-  if (!view.file) {
+  const readable = view.files.filter(file => !file.bridgeOnly);
+  if (!readable.length) {
     view.defaultFontFamily = family;
     return;
   }
@@ -292,7 +294,8 @@ async function selectUdfDefaultFont(select) {
   view.problem = "";
   try {
     const { inspectUdfFonts } = await import("./udf-engine.js");
-    view.file.fontRequirements = await inspectUdfFonts(view.file.file, family);
+    const requirements = await Promise.all(readable.map(file => inspectUdfFonts(file.file, family)));
+    readable.forEach((file, index) => { file.fontRequirements = requirements[index]; });
     view.defaultFontFamily = family;
     discardResult(view);
   } catch (error) {
@@ -344,6 +347,57 @@ async function bridgeToPdf(file) {
   };
 }
 
+// Warnings of several documents: one that only some of them have names them.
+function batchWarnings(outputs) {
+  const byMessage = new Map();
+  for (const { name, warnings = [] } of outputs) {
+    for (const message of warnings) byMessage.set(message, [...(byMessage.get(message) ?? []), name]);
+  }
+  return [...byMessage].map(([message, names]) =>
+    outputs.length > 1 && names.length < outputs.length ? `${names.join(", ")}: ${message}` : message);
+}
+
+// Converts the UDF files one after another, in the browser or through the UYAP bridge,
+// and returns one PDF, a merged PDF or a ZIP of PDFs.
+async function convertUdfFiles({ files, bridge, merged, fonts, family }, progress) {
+  // Loaded only when needed, so that a bridge request still follows the click directly
+  // (Chrome asks its permission for that request).
+  let engine;
+  const loadEngine = async () => (engine ??= await import("./udf-engine.js"));
+  const outputs = [];
+  for (const [index, attachment] of files.entries()) {
+    progress(index + 1, files.length);
+    try {
+      const result = bridge ? await bridgeToPdf(attachment.file) : await (await loadEngine()).udfToPdf(attachment.file, fonts, family);
+      outputs.push({ ...result, name: attachment.name });
+    } catch (error) {
+      // A closed bridge or a refused permission is not about this file.
+      if (files.length === 1 || error?.reason === "unreachable") throw error;
+      throw new Error(`${attachment.name} · ${error?.message || "Dosya dönüştürülemedi."} Bu dosyayı listeden çıkarıp yeniden deneyebilirsiniz.`);
+    }
+  }
+  if (outputs.length === 1) return outputs[0];
+  const warnings = batchWarnings(outputs);
+  if (merged) {
+    progress(files.length, files.length, "PDF’ler birleştiriliyor");
+    const parts = outputs.map(({ bytes, name }) => ({ file: new File([bytes], name, { type: "application/pdf" }), pages: null }));
+    return { ...await runPdfOperation("mergePdfs", parts), warnings };
+  }
+  const used = new Set();
+  const entries = {};
+  for (const { bytes, name } of outputs) {
+    const base = outputName(name.replace(/\.udf$/i, ""), "pdf", "uyap-belgesi").replace(/\.pdf$/i, "");
+    let entry = `${base}.pdf`;
+    for (let copy = 2; used.has(entry.toLowerCase()); copy++) entry = `${base} (${copy}).pdf`;
+    used.add(entry.toLowerCase());
+    entries[entry] = bytes;
+  }
+  return {
+    bytes: (await loadEngine()).zipFiles(entries), mimeType: "application/zip",
+    pageCount: outputs.reduce((sum, output) => sum + output.pageCount, 0), fileCount: outputs.length, warnings,
+  };
+}
+
 function actionRequest(key, view, bridge = false) {
   if (key === "merge") {
     const selection = mergeSelection(view);
@@ -362,11 +416,13 @@ function actionRequest(key, view, bridge = false) {
     return { operation: "splitPdf", args: [view.file.file, pages], name: outputName(name, pages.length > 1 ? "zip" : "pdf", "ayrilmis-belge") };
   }
   if (view === state.convert.udf) {
-    if (!view.file) return null;
-    const name = outputName(view.file.name.replace(/\.udf$/i, ""), "pdf", "uyap-belgesi");
-    if (bridge) return { operation: "udfBridge", args: [view.file.file], name };
-    if (view.file.bridgeOnly) return null;
-    return { operation: "udfToPdf", args: [view.file.file, view.fonts, view.defaultFontFamily], name };
+    if (!view.files.length || (!bridge && view.files.some(file => file.bridgeOnly))) return null;
+    const several = view.files.length > 1;
+    const merged = several && view.output === "merged";
+    const name = several
+      ? outputName("uyap-belgeleri", merged ? "pdf" : "zip", "uyap-belgeleri")
+      : outputName(view.files[0].name.replace(/\.udf$/i, ""), "pdf", "uyap-belgesi");
+    return { operation: "udf", args: [{ files: [...view.files], bridge, merged, fonts: view.fonts, family: view.defaultFontFamily }], name };
   }
   if (key === "convert" && view.files.length) {
     const name = view.files.length === 1 ? view.files[0].name.replace(/\.[^.]+$/, "") : "gorseller";
@@ -385,9 +441,8 @@ async function processFiles(key, { bridge = false } = {}) {
   view.problem = "";
   renderActive(key);
   try {
-    const result = request.operation === "udfToPdf"
-      ? await import("./udf-engine.js").then(({ udfToPdf }) => udfToPdf(...request.args))
-      : request.operation === "udfBridge" ? await bridgeToPdf(...request.args)
+    const result = request.operation === "udf"
+      ? await convertUdfFiles(...request.args, (done, total, message) => showProgress(key, view, message ?? (total > 1 ? `${done} / ${total} belge` : "")))
       : await runPdfOperation(request.operation, ...request.args);
     const { bytes, ...details } = result;
     const blob = new Blob([bytes], { type: details.mimeType });
@@ -396,6 +451,7 @@ async function processFiles(key, { bridge = false } = {}) {
     view.problem = error.message || "Dosya hazırlanamadı. Yeniden deneyin.";
   } finally {
     view.busy = false;
+    view.progress = "";
     renderActive(key);
   }
   if (activeKey() === key) {
@@ -408,6 +464,13 @@ async function processFiles(key, { bridge = false } = {}) {
       focusHeading(error);
     }
   }
+}
+
+// Updates the status line while a batch runs, without redrawing the page.
+function showProgress(key, view, text) {
+  view.progress = text;
+  const line = toolView(activeKey()) === view ? app.querySelector(".operation-status") : null;
+  if (line) line.textContent = text ? `İşlem sürüyor… ${text}` : "İşlem sürüyor…";
 }
 
 function moveFile(view, id, index, action) {
@@ -528,6 +591,10 @@ app.addEventListener("click", event => {
       discardResult(view);
     }
     if (mode === "convert") state.convert.kind = value;
+    if (mode === "udf-output" && view.output !== value) {
+      view.output = value;
+      discardResult(view);
+    }
     render();
     app.querySelector(`[data-mode="${mode}"][data-value="${value}"]`)?.focus({ preventScroll: true });
   }
