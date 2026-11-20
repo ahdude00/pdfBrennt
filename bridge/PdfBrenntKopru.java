@@ -21,6 +21,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +34,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -59,6 +63,9 @@ public final class PdfBrenntKopru {
   static final int MAX_BYTES = 16 * 1024 * 1024;
   static final long TIMEOUT_SECONDS = 120;
   static final String TRAY_CLASS = "tr.com.havelsan.uyap.system.editor.utils.tray.TrayUtils";
+  static final String TRAY_ENTRY = TRAY_CLASS.replace('.', '/') + ".class";
+  // The usual name of the jar that holds TrayUtils. Some installations name it
+  // differently, so the bridge finds the jar by its content and this name only goes first.
   static final String JAR_NAME = "editor-app.jar";
   static final String WINDOWS_EDITOR_DIR = "C:\\UYAP\\Uyap Kelime Islemci";
   // The product code of UYAP Kelime İşlemci's installer, the key of its uninstall entry.
@@ -73,6 +80,7 @@ public final class PdfBrenntKopru {
 
   static int port = DEFAULT_PORT;
   static boolean console;
+  static String trayClass = TRAY_CLASS;
   static Object tray;
   static Method udfToPdf;
   static ClassLoader uyapLoader;
@@ -98,7 +106,7 @@ public final class PdfBrenntKopru {
       else if ("--port".equals(arg) && index + 1 < args.length) port = Integer.parseInt(args[++index]);
       else if ("--origin".equals(arg) && index + 1 < args.length) origins.add(args[++index]);
       else {
-        System.err.println("Kullanım: java -jar pdfbrennt-kopru.jar [--jar editor-app.jar] [--port " + DEFAULT_PORT + "] [--origin URL] [--console]");
+        System.err.println("Kullanım: java -jar pdfbrennt-kopru.jar [--jar editor-app.jar|UYAP-klasörü] [--port " + DEFAULT_PORT + "] [--origin URL] [--console]");
         System.exit(2);
       }
     }
@@ -118,7 +126,7 @@ public final class PdfBrenntKopru {
     File editorJar = locateJar(jarArgument);
     if (console) {
       if (editorJar == null) {
-        fatal("UYAP Editör bulunamadı. editor-app.jar dosyasının yerini --jar ile belirtin.");
+        fatal("UYAP Editör bulunamadı. UYAP klasörünü ya da editor-app.jar dosyasının yerini --jar ile belirtin.");
         return;
       }
       loadUyap(editorJar);
@@ -159,11 +167,12 @@ public final class PdfBrenntKopru {
     if (argument != null && !argument.trim().isEmpty()) candidates.add(new File(argument.trim()));
     String saved = savedJar();
     if (saved != null) candidates.add(new File(saved));
-    for (File folder : installedFolders()) candidates.add(new File(folder, JAR_NAME));
-    candidates.add(new File(WINDOWS_EDITOR_DIR + "\\" + JAR_NAME));
+    candidates.addAll(installedFolders());
+    candidates.add(new File(WINDOWS_EDITOR_DIR));
     for (File candidate : candidates) {
-      searched.add(folderOf(candidate).getPath());
-      if (candidate.isFile()) return candidate;
+      searched.add((candidate.isDirectory() ? candidate : folderOf(candidate)).getPath());
+      File found = editorIn(candidate, 3);
+      if (found != null) return found;
     }
     List<File> roots = new ArrayList<File>();
     for (String variable : new String[] {"ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"}) {
@@ -179,11 +188,165 @@ public final class PdfBrenntKopru {
       if (children == null) continue;
       for (File child : children) {
         if (!child.isDirectory() || !child.getName().toLowerCase(Locale.ROOT).contains("uyap")) continue;
-        File found = search(child, 4);
+        File found = editorIn(child, 4);
         if (found != null) return found;
       }
     }
     return null;
+  }
+
+  // The jar in this place that holds UYAP Editör's converter. A jar without it stands
+  // for its folder, so choosing any jar of the installation is enough.
+  static File editorIn(File place, int depth) {
+    if (place.isFile()) {
+      if (trayClassIn(place) != null) return place;
+      place = folderOf(place);
+    }
+    File[] children = place.listFiles();
+    if (children == null) return null;
+    Arrays.sort(children);
+    File usual = new File(place, JAR_NAME);
+    if (trayClassIn(usual) != null) return usual;
+    for (File child : children) if (trayClassIn(child) != null) return child;
+    if (depth == 0) return null;
+    for (File child : children) {
+      if (!child.isDirectory() || isJavaRuntime(child)) continue;
+      File found = editorIn(child, depth - 1);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  // The name of UYAP Editör's TrayUtils class if this jar holds it. Versions that moved
+  // the class keep its name and an "uyap" package.
+  static String trayClassIn(File jar) {
+    if (!jar.isFile() || !jar.getName().toLowerCase(Locale.ROOT).endsWith(".jar")) return null;
+    try (ZipFile zip = new ZipFile(jar)) {
+      if (zip.getEntry(TRAY_ENTRY) != null) return TRAY_CLASS;
+      Enumeration<? extends ZipEntry> entries = zip.entries();
+      while (entries.hasMoreElements()) {
+        String name = entries.nextElement().getName();
+        if (name.endsWith("/TrayUtils.class") && name.toLowerCase(Locale.ROOT).contains("uyap")) {
+          return name.substring(0, name.length() - ".class".length()).replace('/', '.');
+        }
+      }
+    } catch (IOException | RuntimeException error) {
+      // Not a readable jar.
+    }
+    return null;
+  }
+
+  static boolean isJavaRuntime(File folder) {
+    String name = folder.getName().toLowerCase(Locale.ROOT);
+    return name.startsWith("jre") || name.startsWith("jdk") || name.equals("runtime") || name.equals("java");
+  }
+
+  // UYAP Editör's jar and the libraries next to it. Some installations keep the libraries
+  // as separate jars that the jar's manifest does not list, so every jar of the folder
+  // (and of a lib folder beside it) is put after the editor's own jar.
+  static URL[] classPath(File jar) throws IOException {
+    Set<File> jars = new LinkedHashSet<File>();
+    jars.add(jar.getAbsoluteFile());
+    File folder = folderOf(jar);
+    collectJars(folder, 2, jars);
+    String name = folder.getName().toLowerCase(Locale.ROOT);
+    if (folder.getParentFile() != null && (name.equals("lib") || name.equals("libs") || name.equals("app"))) {
+      collectJars(folder.getParentFile(), 2, jars);
+    }
+    List<URL> urls = new ArrayList<URL>();
+    for (File file : jars) urls.add(file.toURI().toURL());
+    return urls.toArray(new URL[0]);
+  }
+
+  static void collectJars(File folder, int depth, Set<File> jars) {
+    File[] children = folder.listFiles();
+    if (children == null) return;
+    Arrays.sort(children);
+    for (File child : children) {
+      String name = child.getName().toLowerCase(Locale.ROOT);
+      if (child.isFile() && name.endsWith(".jar") && !name.startsWith("pdfbrennt-kopru")) jars.add(child.getAbsoluteFile());
+    }
+    if (depth == 0) return;
+    for (File child : children) if (child.isDirectory() && !isJavaRuntime(child)) collectJars(child, depth - 1, jars);
+  }
+
+  // Lists the jars of an installation the bridge cannot use, with their manifests and the
+  // class names that may hold a PDF export, so support for that version can be added.
+  // It holds no document content.
+  static File writeReport(File place) {
+    File folder = place.isDirectory() ? place : folderOf(place);
+    Set<File> jars = new LinkedHashSet<File>();
+    collectJars(folder, 2, jars);
+    StringBuilder text = new StringBuilder("PDF Brennt köprüsü " + VERSION + " tanı raporu\n");
+    text.append("Java: ").append(System.getProperty("java.version")).append(' ').append(System.getProperty("java.vendor"))
+        .append(" (").append(System.getProperty("os.arch")).append(")\n");
+    text.append("Sistem: ").append(System.getProperty("os.name")).append(' ').append(System.getProperty("os.version")).append('\n');
+    text.append("Klasör: ").append(folder.getAbsolutePath()).append("\n\n");
+    File[] children = folder.listFiles();
+    if (children != null) {
+      Arrays.sort(children);
+      text.append("Klasördeki dosyalar:\n");
+      for (File child : children) text.append("  ").append(child.getName()).append(child.isDirectory() ? "\\" : "  " + child.length()).append('\n');
+      text.append('\n');
+    }
+    for (File jar : jars) {
+      text.append("== ").append(folder.toPath().relativize(jar.toPath())).append("  ").append(jar.length()).append('\n');
+      try (ZipFile zip = new ZipFile(jar)) {
+        ZipEntry manifest = zip.getEntry("META-INF/MANIFEST.MF");
+        if (manifest != null) {
+          for (String line : new String(readAll(zip.getInputStream(manifest)), StandardCharsets.UTF_8).split("\r?\n")) {
+            if (line.startsWith("Main-Class") || line.startsWith("Class-Path") || line.startsWith(" ")
+                || line.startsWith("Implementation") || line.startsWith("Specification")) text.append("  ").append(line).append('\n');
+          }
+        }
+        int classes = 0;
+        List<String> interesting = new ArrayList<String>();
+        Enumeration<? extends ZipEntry> entries = zip.entries();
+        while (entries.hasMoreElements()) {
+          String name = entries.nextElement().getName();
+          if (!name.endsWith(".class")) continue;
+          classes++;
+          String lower = name.toLowerCase(Locale.ROOT);
+          if (name.contains("$") || !(lower.contains("havelsan") || lower.contains("uyap"))) continue;
+          if (lower.contains("pdf") || lower.contains("tray") || lower.contains("udf") || lower.contains("export")
+              || lower.contains("print") || lower.endsWith("main.class") || lower.contains("convert")) interesting.add(name);
+        }
+        text.append("  ").append(classes).append(" sınıf\n");
+        Collections.sort(interesting);
+        for (int index = 0; index < interesting.size() && index < 300; index++) text.append("  ").append(interesting.get(index)).append('\n');
+      } catch (IOException | RuntimeException error) {
+        text.append("  okunamadı: ").append(error).append('\n');
+      }
+      text.append('\n');
+    }
+    for (File target : new File[] {new File(System.getProperty("user.home"), "Desktop"), new File(System.getProperty("user.home"))}) {
+      if (!target.isDirectory()) continue;
+      File report = new File(target, "pdfbrennt-kopru-rapor.txt");
+      try (OutputStream output = new FileOutputStream(report)) {
+        output.write(text.toString().getBytes(StandardCharsets.UTF_8));
+        return report;
+      } catch (IOException error) {
+        // Try the next folder.
+      }
+    }
+    return null;
+  }
+
+  // Names the jars of a place, so a person can tell which installation was chosen.
+  static String jarsIn(File place) {
+    File folder = place.isDirectory() ? place : folderOf(place);
+    File[] children = folder.listFiles();
+    List<String> names = new ArrayList<String>();
+    if (children != null) {
+      Arrays.sort(children);
+      for (File child : children) if (child.isFile() && child.getName().toLowerCase(Locale.ROOT).endsWith(".jar")) names.add(child.getName());
+    }
+    if (names.isEmpty()) return "Bu klasörde .jar dosyası yok.";
+    int shown = Math.min(names.size(), 12);
+    StringBuilder text = new StringBuilder("Bu klasördeki .jar dosyaları: ");
+    for (int index = 0; index < shown; index++) text.append(index == 0 ? "" : ", ").append(names.get(index));
+    if (names.size() > shown) text.append(" ve ").append(names.size() - shown).append(" dosya daha");
+    return text.append('.').toString();
   }
 
   // UYAP Kelime İşlemci's installer records its folder as the InstallLocation of its
@@ -231,20 +394,6 @@ public final class PdfBrenntKopru {
     return output.toByteArray();
   }
 
-  static File search(File directory, int depth) {
-    File direct = new File(directory, JAR_NAME);
-    if (direct.isFile()) return direct;
-    if (depth == 0) return null;
-    File[] children = directory.listFiles();
-    if (children == null) return null;
-    for (File child : children) {
-      if (!child.isDirectory()) continue;
-      File found = search(child, depth - 1);
-      if (found != null) return found;
-    }
-    return null;
-  }
-
   static File prepareEditor(File jar) {
     String problem = notFoundMessage();
     while (true) {
@@ -255,12 +404,24 @@ public final class PdfBrenntKopru {
         } catch (Exception | LinkageError error) {
           error.printStackTrace();
           problem = "Seçilen dosya açılamadı:\n    " + jar.getAbsolutePath() + "\n"
-              + "Bu dosya UYAP Doküman Editörü'nün editor-app.jar dosyası olmayabilir.\n"
-              + "UYAP Doküman Editörü'nü açıp çalıştığını da kontrol edin.";
+              + "Bu sürüm desteklenmiyor olabilir.\n"
+              + "UYAP Doküman Editörü'nü açıp çalıştığını da kontrol edin.\n";
         }
       }
-      jar = chooseJar(problem);
-      if (jar == null) return null;
+      File chosen = chooseJar(problem);
+      if (chosen == null) return null;
+      jar = editorIn(chosen, 3);
+      if (jar == null) {
+        problem = "Seçilen klasörde PDF Brennt'in kullandığı UYAP dönüştürücüsü bulunamadı:\n    "
+            + (chosen.isDirectory() ? chosen : folderOf(chosen)).getAbsolutePath() + "\n"
+            + jarsIn(chosen) + "\n";
+        File report = writeReport(chosen);
+        if (report != null) {
+          problem += "\nBu UYAP sürümü köprüyle henüz çalışmıyor olabilir. Klasörün içeriği şu dosyaya yazıldı:\n    "
+              + report.getAbsolutePath() + "\nBu dosyayı PDF Brennt geliştiricisine gönderirseniz bu sürüm de desteklenebilir.\n"
+              + "Dosyada belge içeriği yoktur; yalnızca UYAP programının dosya ve sınıf adları vardır.\n";
+        }
+      }
     }
   }
 
@@ -280,7 +441,8 @@ public final class PdfBrenntKopru {
     File start = new File(WINDOWS_EDITOR_DIR);
     for (File folder : installedFolders()) if (!start.isDirectory()) start = folder;
     JFileChooser chooser = new JFileChooser(start.isDirectory() ? start : null);
-    chooser.setDialogTitle("UYAP dosyasını seçin");
+    chooser.setDialogTitle("UYAP klasörünü ya da içindeki bir .jar dosyasını seçin");
+    chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
     chooser.setFileFilter(new FileNameExtensionFilter("UYAP dosyası (*.jar)", "jar"));
     return chooser.showDialog(null, "Seç") == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
   }
@@ -289,12 +451,13 @@ public final class PdfBrenntKopru {
     return problem + "\n"
         + "UYAP Doküman Editörü genellikle şu klasöre kurulur:\n"
         + "    " + WINDOWS_EDITOR_DIR + "\n"
-        + "Bu klasörde editor-app.jar adlı bir dosya bulunur.\n\n"
+        + "Bu klasörde editor-app.jar ya da adı farklı .jar dosyaları bulunur.\n\n"
         + "Başka bir yere kurulduysa yerini şöyle bulabilirsiniz:\n"
         + "  1. Klavyede Windows + E tuşlarına basın. Soldan “Bu bilgisayar”ı seçin.\n"
-        + "  2. Sağ üstteki arama kutusuna editor-app.jar yazıp Enter'a basın.\n"
-        + "  3. Bulunan dosyaya sağ tıklayıp “Dosya konumunu aç”ı seçin. Açılan klasör UYAP'ın klasörüdür.\n"
-        + "Sonra aşağıdaki Dosya seç düğmesine basın, o klasördeki editor-app.jar dosyasını seçip Seç'e basın.\n\n"
+        + "  2. Sağ üstteki arama kutusuna Uyap Kelime yazıp Enter'a basın.\n"
+        + "  3. Bulunan klasörün yolunu not edin. Bu klasör UYAP'ın klasörüdür.\n"
+        + "Sonra aşağıdaki Dosya seç düğmesine basın. O klasördeki herhangi bir .jar dosyasını seçip Seç'e basın.\n"
+        + "Doğru dosyayı köprü kendisi bulur.\n\n"
         + "Arama hiçbir şey bulmazsa UYAP Doküman Editörü bu bilgisayarda kurulu değildir.\n"
         + "Önce UYAP Doküman Editörü'nü kurun (uyap.gov.tr), sonra köprüyü yeniden açın.";
   }
@@ -320,16 +483,20 @@ public final class PdfBrenntKopru {
   }
 
   static void loadUyap(File jar) throws Exception {
-    URLClassLoader loader = new URLClassLoader(new URL[] {jar.toURI().toURL()}, PdfBrenntKopru.class.getClassLoader());
+    String className = trayClassIn(jar);
+    if (className == null) className = TRAY_CLASS;
+    URLClassLoader loader = new URLClassLoader(classPath(jar), PdfBrenntKopru.class.getClassLoader());
     Thread thread = Thread.currentThread();
     ClassLoader previousLoader = thread.getContextClassLoader();
     thread.setContextClassLoader(loader);
     try {
-      Class<?> type = Class.forName(TRAY_CLASS, true, loader);
-      Method converter = type.getMethod("udfToPdf", OutputStream.class, ByteArrayInputStream.class);
-      tray = type.getMethod("getInstance").invoke(null);
+      Class<?> type = Class.forName(className, true, loader);
+      Method converter = converterOf(type);
+      if (converter == null) throw new Exception("Bu UYAP sürümünde udfToPdf bulunamadı: " + className);
+      tray = java.lang.reflect.Modifier.isStatic(converter.getModifiers()) ? null : instanceOf(type);
       udfToPdf = converter;
       uyapLoader = loader;
+      trayClass = className;
     } catch (Exception | LinkageError error) {
       thread.setContextClassLoader(previousLoader);
       try {
@@ -344,12 +511,39 @@ public final class PdfBrenntKopru {
     }
   }
 
+  // TrayUtils.udfToPdf(OutputStream, ByteArrayInputStream); older versions may declare
+  // the stream parameters more broadly or the other way round.
+  static Method converterOf(Class<?> type) {
+    try {
+      return type.getMethod("udfToPdf", OutputStream.class, ByteArrayInputStream.class);
+    } catch (NoSuchMethodException error) {
+      // Look for a compatible signature below.
+    }
+    for (Method method : type.getMethods()) {
+      Class<?>[] parameters = method.getParameterTypes();
+      if (!"udfToPdf".equals(method.getName()) || parameters.length != 2) continue;
+      if (parameters[0].isAssignableFrom(ByteArrayOutputStream.class) && parameters[1].isAssignableFrom(ByteArrayInputStream.class)) return method;
+      if (parameters[1].isAssignableFrom(ByteArrayOutputStream.class) && parameters[0].isAssignableFrom(ByteArrayInputStream.class)) return method;
+    }
+    return null;
+  }
+
+  static Object instanceOf(Class<?> type) throws Exception {
+    try {
+      return type.getMethod("getInstance").invoke(null);
+    } catch (NoSuchMethodException error) {
+      return type.getConstructor().newInstance();
+    }
+  }
+
   static byte[] convert(final byte[] udf) throws Exception {
     Future<byte[]> task = worker.submit(() -> {
       Thread.currentThread().setContextClassLoader(uyapLoader);
       ByteArrayOutputStream output = new ByteArrayOutputStream();
       try {
-        udfToPdf.invoke(tray, output, new ByteArrayInputStream(udf));
+        ByteArrayInputStream input = new ByteArrayInputStream(udf);
+        if (udfToPdf.getParameterTypes()[0].isAssignableFrom(ByteArrayOutputStream.class)) udfToPdf.invoke(tray, output, input);
+        else udfToPdf.invoke(tray, input, output);
       } catch (InvocationTargetException error) {
         throw error.getCause() instanceof Exception ? (Exception) error.getCause() : error;
       }

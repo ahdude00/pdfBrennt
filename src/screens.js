@@ -181,13 +181,13 @@ function udfBridgeBox(view) {
         </details>
         <details>
           <summary>Köprü UYAP’ı bulamazsa</summary>
-          <p>Köprü UYAP Doküman Editörü’nü kendisi arar. Bulamazsa hangi klasörlere baktığını yazar. Editör genellikle <code>C:\\UYAP\\Uyap Kelime Islemci</code> klasörüne kurulur.</p>
+          <p>Köprü UYAP Doküman Editörü’nü kendisi arar. Bulamazsa hangi klasörlere baktığını yazar. Editör genellikle <code>C:\\UYAP\\Uyap Kelime Islemci</code> klasörüne kurulur. Bu klasörde <code>editor-app.jar</code> ya da sürüme göre <code>editor_lib.jar</code> gibi adı farklı <code>.jar</code> dosyaları bulunur.</p>
           <ol>
             <li>Klavyede <kbd>Windows</kbd> + <kbd>E</kbd> tuşlarına basın. Soldan <strong>Bu bilgisayar</strong>’ı seçin.</li>
-            <li>Sağ üstteki arama kutusuna <code>editor-app.jar</code> yazıp <kbd>Enter</kbd>’a basın.</li>
-            <li>Bulunan dosyaya sağ tıklayıp <strong>Dosya konumunu aç</strong>’ı seçin. Açılan klasör UYAP’ın klasörüdür.</li>
-            <li>Köprü penceresinde <strong>Dosya seç</strong> düğmesine basın. O klasördeki <code>editor-app.jar</code> dosyasını seçip <strong>Seç</strong>’e basın. <strong>“Köprü hazır.”</strong> yazısını bekleyin.</li>
+            <li>Sağ üstteki arama kutusuna <code>Uyap Kelime</code> yazıp <kbd>Enter</kbd>’a basın. Bulunan klasör UYAP’ın klasörüdür.</li>
+            <li>Köprü penceresinde <strong>Dosya seç</strong> düğmesine basın. O klasördeki herhangi bir <code>.jar</code> dosyasını seçip <strong>Seç</strong>’e basın. Doğru dosyayı köprü kendisi bulur. <strong>“Köprü hazır.”</strong> yazısını bekleyin.</li>
           </ol>
+          <p>Köprü seçilen klasörde dönüştürücüyü bulamazsa bu UYAP sürümü henüz desteklenmiyor olabilir. Köprü o zaman Masaüstü’ne <code>pdfbrennt-kopru-rapor.txt</code> adlı bir dosya yazar. Bu dosyada belge içeriği yoktur, yalnızca UYAP programının dosya adları vardır. Dosyayı geliştiriciye gönderirseniz bu sürüm de desteklenebilir.</p>
           <p>Arama hiçbir şey bulmazsa UYAP Doküman Editörü bu bilgisayarda kurulu değildir. Önce editörü kurun, sonra köprüyü yeniden açın.</p>
         </details>
       </li>
