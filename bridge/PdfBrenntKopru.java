@@ -11,11 +11,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.URL;
+import java.net.Socket;
 import java.net.URLClassLoader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +83,11 @@ public final class PdfBrenntKopru {
 
   static int port = DEFAULT_PORT;
   static boolean console;
+  // Set in the copy of the bridge that the double-clicked one starts with UYAP's Java.
+  static boolean child;
+  static final List<String> extraOrigins = new ArrayList<String>();
+  static final File LOG = new File(System.getProperty("user.home"), ".pdfbrennt-kopru.log");
+  static JLabel errorLabel;
   static String trayClass = TRAY_CLASS;
   static Object tray;
   static Method udfToPdf;
@@ -102,9 +110,13 @@ public final class PdfBrenntKopru {
     for (int index = 0; index < args.length; index++) {
       String arg = args[index];
       if ("--console".equals(arg)) console = true;
+      else if ("--child".equals(arg)) child = true;
       else if ("--jar".equals(arg) && index + 1 < args.length) jarArgument = args[++index];
       else if ("--port".equals(arg) && index + 1 < args.length) port = Integer.parseInt(args[++index]);
-      else if ("--origin".equals(arg) && index + 1 < args.length) origins.add(args[++index]);
+      else if ("--origin".equals(arg) && index + 1 < args.length) {
+        extraOrigins.add(args[++index]);
+        origins.add(args[index]);
+      }
       else {
         System.err.println("Kullanım: java -jar pdfbrennt-kopru.jar [--jar editor-app.jar|UYAP-klasörü] [--port " + DEFAULT_PORT + "] [--origin URL] [--console]");
         System.exit(2);
@@ -136,6 +148,10 @@ public final class PdfBrenntKopru {
         System.exit(0);
         return;
       }
+      if (!child && relaunch(editorJar)) {
+        System.exit(0);
+        return;
+      }
     }
     HttpServer server;
     try {
@@ -153,6 +169,113 @@ public final class PdfBrenntKopru {
     String message = "PDF Brennt köprüsü çalışıyor: http://127.0.0.1:" + port + "  UYAP Editör: " + editorJar;
     if (console) System.out.println(message);
     else showWindow(folderOf(editorJar));
+  }
+
+  // ---- Java ---------------------------------------------------------------------------
+
+  static boolean isWindows() {
+    return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+  }
+
+  static String javaExe() {
+    return isWindows() ? "javaw.exe" : "java";
+  }
+
+  static File currentJava() {
+    return new File(new File(System.getProperty("java.home"), "bin"), javaExe());
+  }
+
+  static File javaIn(File home) {
+    File java = new File(new File(home, "bin"), javaExe());
+    return java.isFile() ? java : null;
+  }
+
+  // UYAP Doküman Editörü is built for Java 8 and runs from its own folder. A .jar opened
+  // with a double click may start in a newer Java, so the bridge uses a Java that UYAP
+  // ships with, else an installed Java 8, else the one it was started with.
+  static File preferredJava(File editorFolder) {
+    for (File base : new File[] {editorFolder, editorFolder.getParentFile()}) {
+      File[] children = base == null ? null : base.listFiles();
+      if (children == null) continue;
+      Arrays.sort(children);
+      for (File home : children) {
+        if (!home.isDirectory() || !isJavaRuntime(home)) continue;
+        File java = javaIn(home);
+        if (java != null) return java;
+      }
+    }
+    if ("1.8".equals(System.getProperty("java.specification.version"))) return currentJava();
+    List<File> found = new ArrayList<File>();
+    for (String variable : new String[] {"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"}) {
+      String root = System.getenv(variable);
+      if (root == null) continue;
+      for (String vendor : new String[] {"Java", "Eclipse Adoptium", "AdoptOpenJDK", "Zulu", "Amazon Corretto", "BellSoft", "Semeru"}) {
+        File[] homes = new File(root, vendor).listFiles();
+        if (homes == null) continue;
+        for (File home : homes) {
+          if (!home.getName().toLowerCase(Locale.ROOT).matches("^(jre|jdk|zulu|openjdk)[-_]?(1\\.8|8)([^0-9].*|$)")) continue;
+          File java = javaIn(home);
+          if (java != null) found.add(java);
+        }
+      }
+    }
+    // The newest Java 8 update; jre1.8.0_401 sorts after jre1.8.0_391.
+    found.sort((a, b) -> b.getParentFile().getParentFile().getName().compareTo(a.getParentFile().getParentFile().getName()));
+    return found.isEmpty() ? currentJava() : found.get(0);
+  }
+
+  static boolean portInUse() {
+    try (Socket socket = new Socket()) {
+      socket.connect(new InetSocketAddress("127.0.0.1", port), 300);
+      return true;
+    } catch (IOException error) {
+      return false;
+    }
+  }
+
+  // Starts the bridge again with UYAP's Java and in UYAP's folder, as UYAP itself runs.
+  // Returns true once that copy listens, so this one can quit; false keeps this one.
+  static boolean relaunch(File editorJar) {
+    File folder = folderOf(editorJar);
+    File java = preferredJava(folder);
+    File here = new File(System.getProperty("user.dir")).getAbsoluteFile();
+    boolean sameJava;
+    try {
+      sameJava = java.getCanonicalFile().equals(currentJava().getCanonicalFile());
+    } catch (IOException error) {
+      sameJava = false;
+    }
+    if (sameJava && here.equals(folder.getAbsoluteFile())) return false;
+    if (portInUse()) return false;
+    File self;
+    try {
+      self = new File(PdfBrenntKopru.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+    } catch (Exception error) {
+      return false;
+    }
+    List<String> command = new ArrayList<String>(Arrays.asList(java.getAbsolutePath(),
+        "-Dsun.java2d.dpiaware=false", "-Dsun.java2d.uiScale=1",
+        "-cp", self.getAbsolutePath(), "PdfBrenntKopru", "--child", "--jar", editorJar.getAbsolutePath(), "--port", String.valueOf(port)));
+    for (String origin : extraOrigins) command.addAll(Arrays.asList("--origin", origin));
+    Process process;
+    try {
+      process = new ProcessBuilder(command).directory(folder).redirectErrorStream(true)
+          .redirectOutput(ProcessBuilder.Redirect.to(LOG)).start();
+    } catch (IOException error) {
+      return false;
+    }
+    long deadline = System.currentTimeMillis() + 30000;
+    while (System.currentTimeMillis() < deadline) {
+      if (portInUse()) return true;
+      if (!process.isAlive()) return false;
+      try {
+        Thread.sleep(200);
+      } catch (InterruptedException error) {
+        return false;
+      }
+    }
+    // Still starting, or asking the person something in its own window.
+    return process.isAlive();
   }
 
   static File folderOf(File jar) {
@@ -603,12 +726,12 @@ public final class PdfBrenntKopru {
         try {
           pdf = convert(udf);
         } catch (Exception error) {
-          String detail = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-          send(exchange, 500, "text/plain", "UYAP Editör bu belgeyi dönüştüremedi: " + detail);
+          String detail = reportFailure(error);
+          send(exchange, 500, "text/plain", detail);
           return;
         }
         if (pdf.length < 5 || pdf[0] != '%' || pdf[1] != 'P' || pdf[2] != 'D' || pdf[3] != 'F') {
-          send(exchange, 500, "text/plain", "UYAP Editör PDF üretmedi.");
+          send(exchange, 500, "text/plain", reportFailure(new Exception("UYAP Editör PDF üretmedi (" + pdf.length + " bayt).")));
           return;
         }
         exchange.getResponseHeaders().set("Content-Type", "application/pdf");
@@ -617,13 +740,69 @@ public final class PdfBrenntKopru {
           output.write(pdf);
         }
         int count = converted.incrementAndGet();
-        if (countLabel != null) SwingUtilities.invokeLater(() -> countLabel.setText(count + " dosya dönüştürüldü."));
+        if (countLabel != null) SwingUtilities.invokeLater(() -> {
+          countLabel.setText(count + " dosya dönüştürüldü.");
+          if (errorLabel.isVisible()) {
+            errorLabel.setVisible(false);
+            SwingUtilities.getWindowAncestor(errorLabel).pack();
+          }
+        });
         return;
       }
       send(exchange, 404, "text/plain", "Bulunamadı.");
     } finally {
       exchange.close();
     }
+  }
+
+  // The innermost cause, which names what UYAP Editör stumbled on. The full trace goes to
+  // a file the person can send; it holds UYAP's class names and messages, not the document.
+  static String reportFailure(Throwable error) {
+    Throwable root = error;
+    while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+    String detail = root.getClass().getName() + (root.getMessage() == null ? "" : ": " + root.getMessage());
+    if (detail.length() > 400) detail = detail.substring(0, 400) + "…";
+    StringWriter trace = new StringWriter();
+    try (PrintWriter writer = new PrintWriter(trace)) {
+      writer.println("PDF Brennt köprüsü " + VERSION + " hata kaydı");
+      writer.println(javaDescription());
+      writer.println("Klasör: " + System.getProperty("user.dir"));
+      writer.println("UYAP sınıfı: " + trayClass);
+      if (uyapLoader instanceof URLClassLoader) {
+        for (URL url : ((URLClassLoader) uyapLoader).getURLs()) writer.println("  " + url);
+      }
+      writer.println();
+      error.printStackTrace(writer);
+    }
+    System.err.println(trace);
+    File saved = null;
+    for (File target : new File[] {new File(System.getProperty("user.home"), "Desktop"), new File(System.getProperty("user.home"))}) {
+      if (!target.isDirectory()) continue;
+      File file = new File(target, "pdfbrennt-kopru-hata.txt");
+      try (OutputStream output = new FileOutputStream(file)) {
+        output.write(trace.toString().getBytes(StandardCharsets.UTF_8));
+        saved = file;
+        break;
+      } catch (IOException ignored) {
+        // Try the next folder.
+      }
+    }
+    final String shown = "<html><b>Son dönüşüm başarısız:</b> " + escapeHtml(detail)
+        + (saved == null ? "" : "<br>Ayrıntılar: " + escapeHtml(saved.getAbsolutePath())) + "</html>";
+    if (errorLabel != null) SwingUtilities.invokeLater(() -> {
+      errorLabel.setText(shown);
+      errorLabel.setVisible(true);
+      SwingUtilities.getWindowAncestor(errorLabel).pack();
+    });
+    return detail;
+  }
+
+  static String escapeHtml(String text) {
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  static String javaDescription() {
+    return "Java " + System.getProperty("java.version") + " (" + System.getProperty("os.arch") + "): " + System.getProperty("java.home");
   }
 
   static byte[] readBody(InputStream input) throws IOException {
@@ -680,6 +859,16 @@ public final class PdfBrenntKopru {
       pathRow.add(open, BorderLayout.EAST);
     }
     found.add(pathRow);
+    JLabel runtime = new JLabel(javaDescription());
+    runtime.setAlignmentX(0f);
+    runtime.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+    found.add(runtime);
+    errorLabel = new JLabel();
+    errorLabel.setAlignmentX(0f);
+    errorLabel.setForeground(new java.awt.Color(0xB00020));
+    errorLabel.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+    errorLabel.setVisible(false);
+    found.add(errorLabel);
     content.add(found, BorderLayout.NORTH);
 
     content.add(new JLabel("<html>"
