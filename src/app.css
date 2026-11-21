@@ -46,6 +46,7 @@
 .result .preview-stage { min-width: 0; overflow: hidden; }
 .preview-message { color: var(--muted); font-size: 14px; text-align: center; }
 #result-canvas { max-width: 100%; display: block; box-shadow: 0 4px 14px #17243019; }
+#image-result { display: block; max-width: min(100%, 640px); max-height: 640px; object-fit: contain; box-shadow: 0 4px 14px #17243019; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 9px; color: var(--muted); font-size: 13px; font-weight: 650; }
 .pagination .icon-button { border-color: var(--line); }
 .pagination span { min-width: 66px; text-align: center; }

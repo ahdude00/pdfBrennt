@@ -7,7 +7,7 @@ function assetUrl(directory) {
   return new URL(`${import.meta.env.BASE_URL}pdfjs/${directory}/`, document.baseURI).href;
 }
 
-export async function openPdfPreview(source) {
+export async function openPdfDocument(source, { stopAtErrors = false } = {}) {
   const data = source instanceof Uint8Array ? source.slice() : new Uint8Array(await source.arrayBuffer());
   const task = getDocument({
     data,
@@ -15,18 +15,21 @@ export async function openPdfPreview(source) {
     iccUrl: assetUrl("iccs"),
     standardFontDataUrl: assetUrl("standard_fonts"),
     wasmUrl: assetUrl("wasm"),
+    stopAtErrors,
   });
-  let pdf;
   try {
-    pdf = await task.promise;
+    return { pdf: await task.promise, close: () => task.destroy() };
   } catch (error) {
     await task.destroy().catch(() => {});
     const message = error instanceof PasswordException
-      ? "Şifreli PDF için önizleme kullanılamıyor."
-      : "PDF önizlemesi açılamadı.";
+      ? "Şifreli PDF açılamadı. Önce PDF’nin kilidini açın."
+      : "PDF açılamadı. Geçerli ve okunabilir bir PDF seçin.";
     throw new Error(message, { cause: error });
   }
+}
 
+export async function openPdfPreview(source) {
+  const { pdf, close } = await openPdfDocument(source);
   const renders = new WeakMap();
   let closePromise;
   return {
@@ -64,7 +67,7 @@ export async function openPdfPreview(source) {
       }
     },
     close() {
-      closePromise ??= task.destroy();
+      closePromise ??= close();
       return closePromise;
     },
   };

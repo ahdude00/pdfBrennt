@@ -1,5 +1,5 @@
 import { catalog, escapeHtml, home, icon, iconTile, renderCatalog } from "./ui.js";
-import { convertScreen, editScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
+import { convertScreen, editScreen, imageScreen, imageSelectionSummary, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
 import { formatRange, parseRange } from "./page-ranges.js";
 import { runPdfOperation } from "./pdf-client.js";
 import { applyPageEdit, hasPageEdits, moveEditedPage, resetPageEdits, toggleEditedPage } from "./page-editor.js";
@@ -13,6 +13,7 @@ const state = {
   merge: { files: [], name: "birlesik-belge.pdf" },
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
   edit: { file: null },
+  raster: { file: null, mode: "all", range: "", thumbOffset: 0, format: "png", dpi: 150 },
   convert: {
     files: [], kind: "image", size: "original",
     // output: "separate" gives one PDF per UDF (a ZIP when there are several), "merged" one PDF.
@@ -27,6 +28,7 @@ const routes = {
   ayir: { key: "split", screen: splitScreen },
   sayfalar: { key: "edit", screen: editScreen },
   donustur: { key: "convert", screen: convertScreen },
+  gorsel: { key: "raster", screen: imageScreen },
 };
 let route;
 let nextFileId = 0;
@@ -54,6 +56,13 @@ function splitSelection(view) {
   const selected = parseRange(view.range, view.file.pages);
   if (selected.error) return { error: selected.error, groups: [], count: 0 };
   return { count: selected.pages.length, groups: view.mode === "extract" ? [selected.pages] : selected.groups };
+}
+
+function rasterSelection(view) {
+  if (!view.file) return { count: 0, pages: [] };
+  if (view.mode === "all") return { count: view.file.pages, pages: null };
+  const { pages = [], error } = parseRange(view.range, view.file.pages);
+  return { count: pages.length, pages, error };
 }
 
 function showRangeStatus(input, error, message) {
@@ -92,6 +101,21 @@ function updateSplit(view, markError = false) {
   const selected = new Set(groups?.flat());
   for (const page of app.querySelectorAll("[data-page]")) {
     page.setAttribute("aria-pressed", String(groups === null || selected.has(Number(page.dataset.page))));
+  }
+}
+
+function updateRaster(view, markError = false) {
+  const selection = rasterSelection(view);
+  const summary = imageSelectionSummary(selection, view.format);
+  app.querySelector("#image-pages").textContent = summary.pages;
+  app.querySelector("#image-output").textContent = summary.output;
+  app.querySelector("#image-action").disabled = Boolean(view.busy || view.loading || !selection.count);
+  const input = app.querySelector("#image-range");
+  if (!input) return;
+  showRangeStatus(input, app.querySelector("#image-range-error"), markError || view.range.trim() ? selection.error : "");
+  const selected = new Set(selection.pages);
+  for (const page of app.querySelectorAll("[data-page]")) {
+    page.setAttribute("aria-pressed", String(selection.pages === null || selected.has(Number(page.dataset.page))));
   }
 }
 
@@ -156,11 +180,14 @@ function render() {
   previewRender?.abort();
   previewRender = new AbortController();
   const { signal } = previewRender;
-  app.innerHTML = screen(key === "edit" ? { ...view, changed: hasPageEdits(view) } : view);
+  let screenView = view;
+  if (key === "edit") screenView = { ...view, changed: hasPageEdits(view) };
+  if (key === "raster") screenView = { ...view, selection: rasterSelection(view) };
+  app.innerHTML = screen(screenView);
   if (key === "home") updateCatalog();
   if (key === "merge") updateMerge(view);
   if (key === "split") updateSplit(view);
-  if (key === "split" || key === "edit") {
+  if (key === "split" || key === "edit" || key === "raster") {
     void paintThumbnails(view.file, [...app.querySelectorAll("[data-thumb]")], signal);
   }
   if (key === "convert" && view.kind === "image") {
@@ -228,7 +255,7 @@ async function loadFiles(key, files) {
   const view = toolView(key);
   if (!files.length || view.loading || view.busy || (key === "convert" && state.convert.kind === "office")) return;
   const udf = view === state.convert.udf;
-  const single = key === "split" || key === "edit";
+  const single = key === "split" || key === "edit" || key === "raster";
   if (udf) discardResult(view);
   view.loading = true;
   view.problem = "";
@@ -273,6 +300,7 @@ async function loadFiles(key, files) {
             else {
               view.range = "";
               view.thumbOffset = 0;
+              if (key === "raster") view.mode = "all";
             }
           }
         }
@@ -436,6 +464,19 @@ function actionRequest(key, view, bridge = false) {
     const name = view.file.name.replace(/\.pdf$/i, "") + "-ayrilmis";
     return { operation: "splitPdf", args: [view.file.file, pages], name: outputName(name, pages.length > 1 ? "zip" : "pdf", "ayrilmis-belge") };
   }
+  if (key === "raster") {
+    const { count, pages } = rasterSelection(view);
+    if (!count) return null;
+    const source = view.file.name.replace(/\.pdf$/i, "") || "belge";
+    const format = view.format;
+    const extension = count > 1 ? "zip" : format === "jpeg" ? "jpg" : "png";
+    const name = count > 1 ? `${source}-gorseller` : `${source}-sayfa-${pages?.[0] ?? 1}`;
+    return {
+      operation: "pdfToImages",
+      args: [view.file.file, { pages: pages ?? Array.from({ length: count }, (_, index) => index + 1), format, dpi: view.dpi }],
+      name: outputName(name, extension, "gorseller"),
+    };
+  }
   if (view === state.convert.udf) {
     if (!view.files.length || (!bridge && view.files.some(file => file.bridgeOnly))) return null;
     const several = view.files.length > 1;
@@ -462,9 +503,15 @@ async function processFiles(key, { bridge = false } = {}) {
   view.problem = "";
   renderActive(key);
   try {
-    const result = request.operation === "udf"
-      ? await convertUdfFiles(...request.args, (done, total, message) => showProgress(key, view, message ?? (total > 1 ? `${done} / ${total} belge` : "")))
-      : await runPdfOperation(request.operation, ...request.args);
+    let result;
+    if (request.operation === "udf") {
+      result = await convertUdfFiles(...request.args, (done, total, message) => showProgress(key, view, message ?? (total > 1 ? `${done} / ${total} belge` : "")));
+    } else if (request.operation === "pdfToImages") {
+      const { pdfToImages } = await import("./pdf-images.js");
+      result = await pdfToImages(...request.args, (done, total) => showProgress(key, view, `${done} / ${total} sayfa`));
+    } else {
+      result = await runPdfOperation(request.operation, ...request.args);
+    }
     const { bytes, ...details } = result;
     const blob = new Blob([bytes], { type: details.mimeType });
     view.result = { ...details, blob, name: request.name, url: URL.createObjectURL(blob), page: 1 };
@@ -516,10 +563,11 @@ function clearFiles(view) {
   if (view.file) {
     view.file = null;
     if (view === state.edit) resetPageEdits(view);
-    if (view === state.split) {
+    if (view === state.split || view === state.raster) {
       view.range = "";
       view.thumbOffset = 0;
     }
+    if (view === state.raster) view.mode = "all";
   }
   view.problem = "";
   render();
@@ -535,6 +583,30 @@ function clickPage(view, number) {
   app.querySelector("#split-range").value = view.range;
   discardResult(view);
   updateSplit(view);
+}
+
+function discardRasterResult(view) {
+  discardResult(view);
+  view.problem = "";
+  app.querySelector(".problem")?.remove();
+}
+
+function selectRasterPage(view, pageNumber) {
+  const wasAll = view.mode === "all";
+  const pages = rasterSelection(view).pages ?? [];
+  const index = pages.indexOf(pageNumber);
+  if (index < 0) pages.push(pageNumber);
+  else pages.splice(index, 1);
+  view.mode = "range";
+  view.range = formatRange(pages);
+  discardRasterResult(view);
+  if (wasAll) {
+    render();
+    app.querySelector(`[data-page="${pageNumber}"]`)?.focus({ preventScroll: true });
+  } else {
+    app.querySelector("#image-range").value = view.range;
+    updateRaster(view);
+  }
 }
 
 const dragType = "application/x-pdfbrennt-order";
@@ -559,6 +631,11 @@ app.addEventListener("input", ({ target }) => {
     discardResult(state.split);
     updateSplit(state.split, true);
   }
+  if (target.id === "image-range") {
+    state.raster.range = target.value;
+    discardRasterResult(state.raster);
+    updateRaster(state.raster, true);
+  }
 });
 
 app.addEventListener("change", ({ target }) => {
@@ -573,6 +650,13 @@ app.addEventListener("change", ({ target }) => {
   if (target.id === "image-size") {
     state.convert.size = target.value;
     discardResult(state.convert);
+  }
+  if (target.id === "image-format" || target.id === "image-dpi") {
+    const view = state.raster;
+    if (target.id === "image-format") view.format = target.value;
+    else view.dpi = Number(target.value);
+    discardRasterResult(view);
+    updateRaster(view);
   }
 });
 
@@ -660,6 +744,10 @@ app.addEventListener("click", event => {
       discardResult(view);
     }
     if (mode === "convert") state.convert.kind = value;
+    if (mode === "image-pages" && view.mode !== value) {
+      view.mode = value;
+      discardRasterResult(view);
+    }
     if (mode === "udf-output" && view.output !== value) {
       view.output = value;
       discardResult(view);
@@ -681,7 +769,10 @@ app.addEventListener("click", event => {
       moveFile(view, id, index + (fileAction === "up" ? -1 : 1), fileAction);
     }
   }
-  if (page) clickPage(view, Number(page));
+  if (page) {
+    if (key === "raster") selectRasterPage(view, Number(page));
+    else clickPage(view, Number(page));
+  }
   if (thumbStep) {
     view.thumbOffset += Number(thumbStep) * thumbnailSize;
     render();

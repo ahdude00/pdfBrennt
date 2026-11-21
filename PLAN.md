@@ -63,7 +63,7 @@ Bağımsız tarayıcı motoru UDF 1.8 belgelerini kapsar. Kurallar, kullanıcın
 2. **İlk çalışan sürüm ve ücretsiz yayın.** PNG/JPEG → PDF, PDF Birleştir ve PDF Ayır. Önizleme, geçerli sayfa aralıkları, dokunmatik sıralama ve indirme davranışlarını iOS Safari, Android Chrome ve masaüstü tarayıcılarda doğrula. GitHub Actions ile GitHub Pages’e yayın akışını hazırla.
 3. **Office ve UDF doğrulaması.** Tarayıcıda çalışan dönüştürücü adaylarını referans belgelerle ve mobil cihazlarda dene. Kalite ve cihaz uyumluluğu doğrulanan biçimleri aç. Diğer biçimler için kaynak uygulamada PDF dışa aktarma yolunu göster.
 4. **PDF düzenleme.** Aşağıdaki planla sayfa düzenleyiciyi çıkar. Ardından sayfa içi düzenleme araçlarını ekle.
-5. **Diğer PDF araçları.** PDF’den PNG/JPEG alma, sıkıştırma, OCR ve parola ile PDF şifreleme.
+5. **Diğer PDF araçları.** PDF’den PNG/JPEG alma uygulandı. Sıkıştırma, OCR ve parola ile PDF şifreleme sonraki araçlar arasında.
 
 ## PDF düzenleme uygulama planı
 

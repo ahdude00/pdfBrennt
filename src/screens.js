@@ -296,12 +296,12 @@ function pagination(current, total, action, subject) {
   </div>`;
 }
 
-function thumbnailPicker(view) {
+function thumbnailPicker(view, interactive, selected = []) {
   const count = Math.min(view.file.pages - view.thumbOffset, thumbnailSize);
   const thumbnails = Array.from({ length: count }, (_, index) => {
     const number = view.thumbOffset + index + 1;
     return `<button type="button" class="page-thumb" data-page="${number}"
-      aria-label="${number}. sayfa" aria-pressed="false" ${view.mode === "extract" ? "" : "disabled"}>
+      aria-label="${number}. sayfa" aria-pressed="${selected === null || selected.includes(number)}" ${interactive ? "" : "disabled"}>
       <span class="thumb-art"><canvas data-thumb="${number}" aria-hidden="true" hidden></canvas><span class="thumb-fallback">${icon("file", 23)}</span></span>
       <span>${number}</span>
     </button>`;
@@ -324,7 +324,7 @@ export function splitScreen(view) {
       <span class="panel-lead" id="split-help">${view.mode === "ranges" ? "Her virgülle ayrılan aralıktan ayrı bir PDF oluşturulur." : "Aralık girin veya aşağıdan sayfaları seçin."}</span>
       <span class="range-error" id="split-error" hidden></span>
     </label>
-    ${thumbnailPicker(view)}` : "";
+    ${thumbnailPicker(view, view.mode === "extract")}` : "";
   return `${toolHeader("ayir", "Seçtiğiniz sayfaları çıkarın veya bir PDF’yi ayrı dosyalara bölün.")}
     <div class="workspace">
       <section class="panel" aria-labelledby="split-heading">
@@ -346,6 +346,63 @@ export function splitScreen(view) {
         ${privacyNote()}
       </aside>
     </div>${resultPanel(view.result)}`;
+}
+
+export function imageSelectionSummary({ count }, format) {
+  if (!count) return { pages: "—", output: "—" };
+  const imageFormat = format.toUpperCase();
+  return { pages: `${count} sayfa`, output: count > 1 ? `${count} ${imageFormat} · ZIP` : imageFormat };
+}
+
+export function imageScreen(view) {
+  const { file, mode, range, format, dpi, selection } = view;
+  const summary = imageSelectionSummary(selection, format);
+  const rangeError = mode === "range" && range.trim() ? selection.error : "";
+  const source = uploadZone("image-input", file ? "Başka PDF seç" : "PDF seç", "Bir PDF dosyası seçin ya da buraya sürükleyin.", ".pdf,application/pdf");
+  const pageControls = file ? `
+    <div class="file-row row-top">${fileDetails(file)}</div>
+    <div class="mode-options split-modes" role="group" aria-label="Sayfa seçimi">
+      ${modeButton("image-pages", "all", "Tüm sayfalar", mode)}
+      ${modeButton("image-pages", "range", "Sayfaları seç", mode)}
+    </div>
+    <label class="split-input field-label" ${mode === "all" ? "hidden" : ""}>Sayfa aralığı
+      <input class="control" id="image-range" value="${e(range)}" placeholder="1-3, 6" aria-describedby="image-range-help image-range-error" ${rangeError ? 'aria-invalid="true"' : ""}>
+      <span class="panel-lead" id="image-range-help">Aralık girin veya aşağıdan sayfaları seçin.</span>
+      <span class="range-error" id="image-range-error" ${rangeError ? "" : "hidden"}>${e(rangeError ?? "")}</span>
+    </label>
+    ${thumbnailPicker(view, true, selection.pages)}` : "";
+  return `${toolHeader("gorsel", "PDF sayfalarını PNG veya JPEG olarak kaydedin. Birden fazla sayfa ZIP olarak iner.")}
+    <div class="workspace">
+      <section class="panel" aria-labelledby="image-heading">
+        <div class="panel-title">
+          <div><h2 id="image-heading">Kaynak PDF</h2><p class="panel-lead">Bir PDF açıp tüm sayfaları veya küçük resimlerden istediğiniz sayfaları seçin.</p></div>
+          ${file ? `<button type="button" class="text-button" data-clear ${view.loading || view.busy ? "disabled" : ""}>Dosyayı kaldır</button>` : ""}
+        </div>
+        ${progressOrFiles(view, source + pageControls)}
+      </section>
+      <aside class="panel summary" aria-labelledby="image-summary">
+        <h2 id="image-summary">Görsel ayarları</h2>
+        <fieldset class="input-area" ${view.loading || view.busy ? "disabled" : ""}>
+          <label class="field-label">Görsel biçimi
+            <select class="control" id="image-format">
+              <option value="png" ${format === "png" ? "selected" : ""}>PNG</option>
+              <option value="jpeg" ${format === "jpeg" ? "selected" : ""}>JPEG</option>
+            </select>
+          </label>
+          <label class="field-label">Çözünürlük
+            <select class="control" id="image-dpi">
+              ${[72, 150, 300].map(value => `<option value="${value}" ${dpi === value ? "selected" : ""}>${value} DPI</option>`).join("")}
+            </select>
+          </label>
+        </fieldset>
+        <dl aria-live="polite">
+          <div><dt>Seçilen sayfa</dt><dd id="image-pages">${summary.pages}</dd></div>
+          <div><dt>Çıktı</dt><dd id="image-output">${summary.output}</dd></div>
+        </dl>
+        ${actionButton("image", "Görselleri hazırla", view, !selection.count)}
+        ${privacyNote()}
+      </aside>
+    </div>${resultPanel(view.result, "görsel")}`;
 }
 
 function editCommand(command, label, disabled, glyph) {
@@ -445,24 +502,29 @@ export function editScreen(view) {
     </div>${resultPanel(view.result)}`;
 }
 
-function resultPanel(result) {
+function resultPanel(result, archiveItem = "PDF") {
   if (!result) return "";
   const pdf = result.mimeType === "application/pdf";
-  const description = pdf ? `${result.pageCount} sayfa · PDF` : `${result.fileCount} PDF · ZIP`;
+  const image = { "image/png": "PNG", "image/jpeg": "JPEG" }[result.mimeType];
+  const dimensions = Number.isFinite(result.width) && Number.isFinite(result.height) ? ` · ${result.width} × ${result.height} px` : "";
+  const description = pdf ? `${result.pageCount} sayfa · PDF` : image ? `${image}${dimensions}` : `${result.fileCount} ${archiveItem} · ZIP`;
+  const downloadLabel = pdf ? "PDF’yi indir" : image ? "Görseli indir" : "ZIP’i indir";
   return `<section class="panel result" id="result" aria-labelledby="result-title">
     <div class="result-header">
       <div class="result-heading">
         <span class="icon teal">${icon("check")}</span>
         <div><h2 id="result-title">Dosyanız hazır</h2><p class="panel-lead"><strong>${e(result.name)}</strong> · ${description}</p></div>
       </div>
-      <a class="button" data-download href="${e(result.url)}" download="${e(result.name)}">${icon("download", 17)} ${pdf ? "PDF’yi indir" : "ZIP’i indir"}</a>
+      <a class="button" data-download href="${e(result.url)}" download="${e(result.name)}">${icon("download", 17)} ${downloadLabel}</a>
     </div>
     ${result.warnings?.map(message => `<p class="notice">${e(message)}</p>`).join("") ?? ""}
     ${pdf ? `<div class="preview-stage">
       <p class="preview-message" id="preview-message" role="status">Önizleme hazırlanıyor…</p>
       <canvas id="result-canvas" role="img" aria-label="Çıktı önizlemesi, sayfa ${result.page}" hidden></canvas>
     </div>
-    ${result.pageCount > 1 ? pagination(result.page, result.pageCount, "preview-step", "sayfa") : ""}` : ""}
+    ${result.pageCount > 1 ? pagination(result.page, result.pageCount, "preview-step", "sayfa") : ""}` : image ? `<div class="preview-stage">
+      <img id="image-result" src="${e(result.url)}" alt="Dışa aktarılan PDF sayfası">
+    </div>` : ""}
   </section>`;
 }
 
