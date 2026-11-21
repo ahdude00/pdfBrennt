@@ -19,8 +19,8 @@ function status(view) {
   return view.problem ? `<p class="problem" role="alert">${e(view.problem)}</p>` : "";
 }
 
-function actionButton(id, label, view) {
-  return `<button class="button" type="button" id="${id}-action" data-operation ${view.loading || view.busy ? "disabled" : ""}>
+function actionButton(id, label, view, unavailable = false) {
+  return `<button class="button" type="button" id="${id}-action" data-operation ${view.loading || view.busy || unavailable ? "disabled" : ""}>
     ${view.busy ? "Hazırlanıyor…" : label} ${icon("arrow", 16)}</button>`;
 }
 
@@ -343,6 +343,103 @@ export function splitScreen(view) {
         </dl>
         ${view.file?.hasDigitalSignature ? signatureNote() : ""}
         ${actionButton("split", "Sayfaları ayır", view)}
+        ${privacyNote()}
+      </aside>
+    </div>${resultPanel(view.result)}`;
+}
+
+function editCommand(command, label, disabled, glyph) {
+  return `<button type="button" class="mode-button edit-command" data-edit-command="${command}" ${disabled ? "disabled" : ""}>
+    ${glyph ? icon(glyph, 15) : ""}${label}</button>`;
+}
+
+function editPageTile({ pageNumber, rotation }, position, selected, locked) {
+  const pageLabel = pageNumber === position ? `${position}. sayfa` : `${position}. sırada, kaynak sayfa ${pageNumber}`;
+  const label = rotation ? `${pageLabel}, ${rotation} derece döndürüldü` : pageLabel;
+  return `<li class="edit-page" data-edit-page="${pageNumber}">
+    <button type="button" class="page-thumb edit-thumb" data-edit-select="${pageNumber}"
+      aria-label="${label}" aria-pressed="${selected}">
+      <span class="thumb-art">
+        <canvas data-thumb="${pageNumber}" data-preview-rotation="${rotation}" aria-hidden="true" hidden></canvas>
+        <span class="thumb-fallback">${icon("file", 23)}</span>
+      </span>
+      <span class="edit-page-caption"><strong>Sayfa ${position}</strong>${pageNumber !== position ? `<span>Kaynak ${pageNumber}</span>` : ""}</span>
+      ${selected ? `<span class="edit-selected-mark">${icon("check", 14)}</span>` : ""}
+    </button>
+    <span class="edit-grip" draggable="${!locked}" title="Sıralamak için sürükleyin" aria-hidden="true">${icon("grip", 17)}</span>
+  </li>`;
+}
+
+function editPages(view) {
+  const { pages, selected, undo, redo, offset } = view;
+  const count = selected.size;
+  const canMove = direction => pages.some(({ pageNumber }, index) => {
+    const neighbor = pages[index + direction];
+    return selected.has(pageNumber) && neighbor && !selected.has(neighbor.pageNumber);
+  });
+  const total = Math.ceil(pages.length / thumbnailSize);
+  return `<div class="file-row row-top">${fileDetails(view.file)}</div>
+    <div class="edit-toolbar">
+      <div class="edit-selection">
+        <span role="status">${count ? `${count} sayfa seçili` : "Bir veya daha fazla sayfa seçin."}</span>
+        <div class="edit-controls" role="group" aria-label="Sayfa seçimi">
+          ${editCommand("select-all", "Tümünü seç", count === pages.length)}
+          ${editCommand("clear-selection", "Seçimi kaldır", !count)}
+        </div>
+      </div>
+      <div class="edit-controls" role="group" aria-label="Seçili sayfaları düzenle">
+        ${editCommand("up", "Yukarı taşı", !canMove(-1), "up")}
+        ${editCommand("down", "Aşağı taşı", !canMove(1), "down")}
+        ${editCommand("rotate-left", "Sola döndür", !count)}
+        ${editCommand("rotate-right", "Sağa döndür", !count)}
+        ${editCommand("remove", "Seçilenleri sil", !count || count === pages.length)}
+      </div>
+      <div class="edit-controls" role="group" aria-label="Düzenleme geçmişi">
+        ${editCommand("undo", "Geri al", !undo.length, "back")}
+        ${editCommand("redo", "Yinele", !redo.length, "arrow")}
+      </div>
+      ${count === pages.length ? '<p class="panel-lead">Belgede en az bir sayfa kalmalıdır.</p>' : ""}
+    </div>
+    <ol class="edit-grid" role="list" aria-label="Çıktı sayfalarının sırası">
+      ${pages.slice(offset, offset + thumbnailSize).map((page, index) =>
+        editPageTile(page, offset + index + 1, selected.has(page.pageNumber), view.busy || view.loading)).join("")}
+    </ol>
+    ${total > 1 ? pagination(offset / thumbnailSize + 1, total, "edit-step", "sayfa grubu") : ""}`;
+}
+
+function editDocumentNote(file) {
+  const notes = [
+    file?.hasFormFields && "Form alanları çıktıda sayfanın parçası olur ve düzenlenebilirliğini kaybeder.",
+    file?.hasOutlines && "Yer imleri kaynak belgede kalır.",
+    file?.hasInternalLinks && "Sayfalar arası bağlantılar kaynak belgede kalır.",
+  ].filter(Boolean);
+  return notes.length ? `<p class="notice document-notice">${icon("info", 17)}<span>${notes.join(" ")}</span></p>` : "";
+}
+
+export function editScreen(view) {
+  const file = view.file;
+  const source = uploadZone("edit-input", file ? "Başka PDF seç" : "PDF seç", "Bir PDF dosyası seçin ya da buraya sürükleyin.", ".pdf,application/pdf");
+  return `${toolHeader("sayfalar", "PDF sayfalarını sıralayın, döndürün veya çıkarın. Sonucu yeni bir PDF olarak indirin.")}
+    <div class="workspace">
+      <section class="panel" aria-labelledby="edit-heading">
+        <div class="panel-title">
+          <div>
+            <h2 id="edit-heading">PDF sayfaları</h2>
+            <p class="panel-lead">Sayfaları seçip yön düğmeleriyle veya sürükleyerek sıralayın.</p>
+          </div>
+          ${file ? `<button type="button" class="text-button" data-clear ${view.loading || view.busy ? "disabled" : ""}>Dosyayı kaldır</button>` : ""}
+        </div>
+        ${progressOrFiles(view, source + (file ? editPages(view) : ""))}
+      </section>
+      <aside class="panel summary" aria-labelledby="edit-summary">
+        <h2 id="edit-summary">Düzenleme özeti</h2>
+        <dl aria-live="polite">
+          <div><dt>Kaynak belge</dt><dd>${file ? `${file.pages} sayfa` : "—"}</dd></div>
+          <div><dt>Çıktı</dt><dd>${file ? `${view.pages.length} sayfa` : "—"}</dd></div>
+        </dl>
+        ${file?.hasDigitalSignature ? signatureNote() : ""}
+        ${editDocumentNote(file)}
+        ${actionButton("edit", "PDF’yi hazırla", view, !file || !view.changed)}
         ${privacyNote()}
       </aside>
     </div>${resultPanel(view.result)}`;

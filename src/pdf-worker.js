@@ -1,6 +1,6 @@
-import { inspectPdf, mergePdfs, splitPdf, imagesToPdf } from "./pdf-engine.js";
+import { editPdf, inspectPdf, mergePdfs, splitPdf, imagesToPdf } from "./pdf-engine.js";
 
-const operations = { inspectPdf, mergePdfs, splitPdf, imagesToPdf };
+const operations = { editPdf, inspectPdf, mergePdfs, splitPdf, imagesToPdf };
 let queue = Promise.resolve();
 
 self.addEventListener("message", ({ data: { id, operation, args } }) => {

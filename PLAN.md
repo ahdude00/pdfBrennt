@@ -62,4 +62,28 @@ Bağımsız tarayıcı motoru UDF 1.8 belgelerini kapsar. Kurallar, kullanıcın
 1. **Tasarım prototipi.** Ana sayfa, dönüştürme, birleştirme ve ayırma akışlarını masaüstünde ve telefonda örnek dosyalarla gözden geçir.
 2. **İlk çalışan sürüm ve ücretsiz yayın.** PNG/JPEG → PDF, PDF Birleştir ve PDF Ayır. Önizleme, geçerli sayfa aralıkları, dokunmatik sıralama ve indirme davranışlarını iOS Safari, Android Chrome ve masaüstü tarayıcılarda doğrula. GitHub Actions ile GitHub Pages’e yayın akışını hazırla.
 3. **Office ve UDF doğrulaması.** Tarayıcıda çalışan dönüştürücü adaylarını referans belgelerle ve mobil cihazlarda dene. Kalite ve cihaz uyumluluğu doğrulanan biçimleri aç. Diğer biçimler için kaynak uygulamada PDF dışa aktarma yolunu göster.
-4. **Ek araçlar.** Sayfa sıralama, silme ve döndürme, PDF’den PNG/JPEG alma, filigran ve sayfa numarası. Ardından sıkıştırmada kalite ve dosya boyutu seçimi, OCR ile taramanın metin katmanı ve parola ile PDF şifreleme.
+4. **PDF düzenleme.** Aşağıdaki planla sayfa düzenleyiciyi çıkar. Ardından sayfa içi düzenleme araçlarını ekle.
+5. **Diğer PDF araçları.** PDF’den PNG/JPEG alma, sıkıştırma, OCR ve parola ile PDF şifreleme.
+
+## PDF düzenleme uygulama planı
+
+### İlk sürüm — uygulandı
+
+Ana sayfadaki **Sayfaları Düzenle** kartı `#sayfalar` ekranını açar. Kullanıcı bir PDF seçer, küçük resimler üzerinden sayfaları işaretler ve sıralar. Seçili sayfalar topluca 90° sola veya sağa döndürülebilir ve silinebilir. Masaüstünde sürükle-bırak, telefonda ve klavyede **Yukarı taşı** ve **Aşağı taşı** kullanılabilir. Kullanıcı son işlemleri geri alabilir ve yeniden uygulayabilir. Çıktı önizlenir ve yeni bir PDF olarak indirilir.
+
+### Uygulama
+
+1. **Ekran ve durum.** Ayır aracının dosya seçicisini, sayfa küçük resimlerini ve sonuç panelini yeniden kullan. Her sayfa için kaynak sayfa numarasını ve dönüş farkını tut. Silinen sayfayı listeden çıkar. Geçmişe sadece sıralama ve açı durumunu kaydet. Son sayfa silme eylemini arayüzde ve PDF motorunda engelle.
+2. **Önizleme.** PDF.js önizlemesinde belgedeki dönüş açısıyla düzenleme açısını birleştir. Görünen küçük resimleri yükle. Dosya değiştiğinde veya sayfa tekrar döndürüldüğünde önceki çizimi iptal et.
+3. **Dışa aktarma.** Mevcut PDF worker’ına `editPdf` işlemini ekle. Planlanan sıradaki sayfaları `pdf-lib` ile yeni belgeye kopyala ve dönüşü sayfa açısına uygula. Böylece sayfa içeriği, çözünürlük ve seçilebilir metin korunur. Sayfaların sırada tekil ve geçerli olduğunu worker’da doğrula. Şifreli dosyalarda mevcut hata akışını kullan.
+4. **Belge özellikleri.** Form alanları, yer imleri ve sayfalar arası bağlantılar için küçük test belgeleri hazırla. Kopyalama sırasında taşınamayan özellikleri açıkça belirt. İmza algılandığında mevcut imzalı belge bildirimini kullan ve kullanıcıya özgün dosyayı koruması için ayrı bir çıktı ver.
+
+### Kabul ölçütleri
+
+- Dört sayfalık bir belgede üçüncü sayfa silinip dördüncü başa alındığında çıktı `4, 1, 2` sırasıyla açılır. Önceden 90° dönmüş bir sayfa 90° daha döndürülürse önizleme ve PDF 180° gösterir.
+- Tek PDF içinde farklı sayfa boyutları, gömülü yazı tipleri ve kırpma alanları korunur. Geri al ve yinele, birden fazla sayfayı etkileyen işlemlerde de çalışır.
+- Telefon ve masaüstünde önizleme, klavyeyle sıralama, hata durumları ve indirme doğrulanır. Dosya verisi cihazda kalır. Mevcut Birleştir, Ayır ve UDF kontrolleri de geçer.
+
+### Sonraki aşamalar
+
+Önce boş sayfa veya başka PDF’den sayfa ekleme gelir. Sayfa içi düzenleme aşamasında metin kutusu, görsel, filigran ve sayfa numarası PDF koordinatlarıyla yerleştirilir. Var olan metni değiştirme ayrı bir çalışma olarak ele alınır. Önce gömülü fontlarla seçilebilir metnin düzenlenebilmesi ve komşu satırların konumunun korunması doğrulanır.

@@ -1,7 +1,8 @@
 import { catalog, escapeHtml, home, icon, iconTile, renderCatalog } from "./ui.js";
-import { convertScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
+import { convertScreen, editScreen, mergeScreen, splitScreen, thumbnailSize } from "./screens.js";
 import { formatRange, parseRange } from "./page-ranges.js";
 import { runPdfOperation } from "./pdf-client.js";
+import { applyPageEdit, hasPageEdits, moveEditedPage, resetPageEdits, toggleEditedPage } from "./page-editor.js";
 import { bridgeFileSizeLimit, bridgeUdfToPdf } from "./udf-bridge.js";
 import { defaultUdfFontFamily, udfFontPresets } from "./udf-font-presets.js";
 
@@ -11,21 +12,25 @@ const state = {
   home: { search: "", group: "Tümü" },
   merge: { files: [], name: "birlesik-belge.pdf" },
   split: { file: null, mode: "extract", range: "", thumbOffset: 0 },
+  edit: { file: null },
   convert: {
     files: [], kind: "image", size: "original",
     // output: "separate" gives one PDF per UDF (a ZIP when there are several), "merged" one PDF.
     udf: { files: [], output: "separate", fonts: new Map(), defaultFontFamily: defaultUdfFontFamily },
   },
 };
+resetPageEdits(state.edit);
 const maxUdfFiles = 50;
 const routes = {
   araclar: { key: "home", screen: home },
   birlestir: { key: "merge", screen: mergeScreen },
   ayir: { key: "split", screen: splitScreen },
+  sayfalar: { key: "edit", screen: editScreen },
   donustur: { key: "convert", screen: convertScreen },
 };
 let route;
 let nextFileId = 0;
+let previewRender;
 
 function activeKey() {
   return routes[route].key;
@@ -101,16 +106,21 @@ function disposePreview(attachment) {
   attachment?.preview?.then(preview => preview?.close()).catch(() => {});
 }
 
-async function paintThumbnails(attachment, canvases) {
+async function paintThumbnails(attachment, canvases, signal) {
   if (!attachment || !canvases.length) return;
   const preview = await previewFor(attachment, attachment.file);
-  if (!preview) return;
+  if (!preview || signal.aborted) return;
   async function paintLane(lane) {
     for (let index = lane; index < canvases.length; index += 2) {
       const canvas = canvases[index];
-      if (!canvas.isConnected) return;
+      if (signal.aborted || !canvas.isConnected) return;
       try {
-        if (await preview.renderPage(Number(canvas.dataset.thumb), canvas, { maxWidth: 65, maxHeight: 70 }) && canvas.isConnected) {
+        const rotation = canvas.dataset.previewRotation;
+        const size = rotation === undefined
+          ? { maxWidth: 65, maxHeight: 70 }
+          : { maxWidth: canvas.parentElement.clientWidth, maxHeight: canvas.parentElement.clientHeight };
+        const options = { ...size, rotationDelta: Number(rotation ?? 0), signal };
+        if (await preview.renderPage(Number(canvas.dataset.thumb), canvas, options) && canvas.isConnected && !signal.aborted) {
           canvas.hidden = false;
           canvas.nextElementSibling.hidden = true;
         }
@@ -122,13 +132,13 @@ async function paintThumbnails(attachment, canvases) {
   await Promise.all([paintLane(0), paintLane(1)]);
 }
 
-async function paintResult(result, canvas, message) {
+async function paintResult(result, canvas, message, signal) {
   const preview = await previewFor(result, result.blob);
-  if (!canvas.isConnected) return;
+  if (signal.aborted || !canvas.isConnected) return;
   try {
     const maxWidth = Math.min(canvas.parentElement.clientWidth - 28, 640);
-    const rendered = preview && await preview.renderPage(result.page, canvas, { maxWidth, maxHeight: 640 });
-    if (rendered && canvas.isConnected) {
+    const rendered = preview && await preview.renderPage(result.page, canvas, { maxWidth, maxHeight: 640, signal });
+    if (rendered && canvas.isConnected && !signal.aborted) {
       canvas.style.width = `${Math.min(maxWidth, canvas.width / Math.min(window.devicePixelRatio || 1, 2))}px`;
       message.hidden = true;
       canvas.hidden = false;
@@ -137,18 +147,21 @@ async function paintResult(result, canvas, message) {
   } catch {
     // Keep the download link available if rendering fails.
   }
-  message.textContent = "Önizleme açılamadı. Dosyayı indirebilirsiniz.";
+  if (!signal.aborted) message.textContent = "Önizleme açılamadı. Dosyayı indirebilirsiniz.";
 }
 
 function render() {
   const { key, screen } = routes[route];
   const view = state[key];
-  app.innerHTML = screen(view);
+  previewRender?.abort();
+  previewRender = new AbortController();
+  const { signal } = previewRender;
+  app.innerHTML = screen(key === "edit" ? { ...view, changed: hasPageEdits(view) } : view);
   if (key === "home") updateCatalog();
   if (key === "merge") updateMerge(view);
-  if (key === "split") {
-    updateSplit(view);
-    void paintThumbnails(view.file, [...app.querySelectorAll("[data-thumb]")]);
+  if (key === "split") updateSplit(view);
+  if (key === "split" || key === "edit") {
+    void paintThumbnails(view.file, [...app.querySelectorAll("[data-thumb]")], signal);
   }
   if (key === "convert" && view.kind === "image") {
     app.querySelector("#convert-action").disabled = Boolean(view.busy || view.loading || !view.files.length);
@@ -160,7 +173,7 @@ function render() {
     if (fontDefault) fontDefault.disabled = Boolean(busy || loading);
   }
   const canvas = app.querySelector("#result-canvas");
-  if (canvas) void paintResult(toolView(key).result, canvas, app.querySelector("#preview-message"));
+  if (canvas) void paintResult(toolView(key).result, canvas, app.querySelector("#preview-message"), signal);
 }
 
 function navigate(focus = false) {
@@ -215,7 +228,7 @@ async function loadFiles(key, files) {
   const view = toolView(key);
   if (!files.length || view.loading || view.busy || (key === "convert" && state.convert.kind === "office")) return;
   const udf = view === state.convert.udf;
-  const single = key === "split";
+  const single = key === "split" || key === "edit";
   if (udf) discardResult(view);
   view.loading = true;
   view.problem = "";
@@ -250,14 +263,17 @@ async function loadFiles(key, files) {
           }
           view.files.push(attachment);
         } else {
-          const { pageCount, hasDigitalSignature } = await runPdfOperation("inspectPdf", file);
-          Object.assign(attachment, { pages: pageCount, hasDigitalSignature, mode: "all", range: "" });
+          const { pageCount, ...features } = await runPdfOperation("inspectPdf", file);
+          Object.assign(attachment, { pages: pageCount, ...features, mode: "all", range: "" });
           if (key === "merge") view.files.push(attachment);
           else {
             disposePreview(view.file);
             view.file = attachment;
-            view.range = "";
-            view.thumbOffset = 0;
+            if (key === "edit") resetPageEdits(view, pageCount);
+            else {
+              view.range = "";
+              view.thumbOffset = 0;
+            }
           }
         }
         discardResult(view);
@@ -266,7 +282,7 @@ async function loadFiles(key, files) {
         errors.push(message.startsWith(`${file.name} `) ? message : `${file.name} · ${message}`);
       }
     }
-    if (single && files.length > 1) errors.push("Ayırma için bir PDF seçebilirsiniz.");
+    if (single && files.length > 1) errors.push("Bu araçta bir PDF seçebilirsiniz.");
     view.problem = errors.slice(0, 3).join(" ") + (errors.length > 3 ? ` Diğer ${errors.length - 3} dosya da eklenemedi.` : "");
   } finally {
     view.loading = false;
@@ -399,6 +415,11 @@ async function convertUdfFiles({ files, bridge, merged, fonts, family }, progres
 }
 
 function actionRequest(key, view, bridge = false) {
+  if (key === "edit") {
+    if (!hasPageEdits(view)) return null;
+    const name = view.file.name.replace(/\.pdf$/i, "") + "-duzenlenmis";
+    return { operation: "editPdf", args: [view.file.file, view.pages], name: outputName(name, "pdf", "duzenlenmis-belge") };
+  }
   if (key === "merge") {
     const selection = mergeSelection(view);
     if (selection.length < 2 || selection.some(part => part.error)) return null;
@@ -494,6 +515,7 @@ function clearFiles(view) {
   if (view.files) view.files = [];
   if (view.file) {
     view.file = null;
+    if (view === state.edit) resetPageEdits(view);
     if (view === state.split) {
       view.range = "";
       view.thumbOffset = 0;
@@ -516,6 +538,7 @@ function clickPage(view, number) {
 }
 
 const dragType = "application/x-pdfbrennt-order";
+const pageDragType = "application/x-pdfbrennt-page-order";
 
 app.addEventListener("input", ({ target }) => {
   if (target.id === "search") {
@@ -554,9 +577,54 @@ app.addEventListener("change", ({ target }) => {
 });
 
 function restorePaginationFocus(button, attribute) {
-  const value = button.dataset[attribute === "thumb-step" ? "thumbStep" : "previewStep"];
+  const value = button.getAttribute(`data-${attribute}`);
   (app.querySelector(`[data-${attribute}="${value}"]:not(:disabled)`)
     ?? app.querySelector(`[data-${attribute}]:not(:disabled)`))?.focus({ preventScroll: true });
+}
+
+function clampEditOffset(view, offset) {
+  const lastOffset = Math.floor((view.pages.length - 1) / thumbnailSize) * thumbnailSize;
+  view.offset = Math.max(0, Math.min(lastOffset, offset));
+}
+
+function renderPageEdits(view) {
+  view.problem = "";
+  discardResult(view);
+  render();
+}
+
+function handlePageEditorButton(button, view) {
+  const { editSelect, editCommand, editStep } = button.dataset;
+  if (!editSelect && !editCommand && !editStep) return false;
+  if (!view.file || view.loading || view.busy) return true;
+
+  if (editSelect && toggleEditedPage(view, Number(editSelect))) {
+    render();
+    app.querySelector(`[data-edit-select="${editSelect}"]`)?.focus({ preventScroll: true });
+  }
+  if (editStep) {
+    clampEditOffset(view, view.offset + Number(editStep) * thumbnailSize);
+    render();
+    restorePaginationFocus(button, "edit-step");
+  }
+  if (editCommand) {
+    const moving = editCommand === "up" || editCommand === "down";
+    const anchor = moving && view.pages.slice(view.offset, view.offset + thumbnailSize)
+      .find(page => view.selected.has(page.pageNumber));
+    const change = applyPageEdit(view, editCommand);
+    if (!change) return true;
+    if (change === "pages") {
+      const position = anchor ? view.pages.indexOf(anchor) : view.offset;
+      clampEditOffset(view, Math.floor(position / thumbnailSize) * thumbnailSize);
+      renderPageEdits(view);
+    } else {
+      render();
+    }
+    (app.querySelector(`[data-edit-command="${editCommand}"]:not(:disabled)`)
+      ?? app.querySelector('[data-edit-select][aria-pressed="true"]')
+      ?? app.querySelector("[data-edit-select]"))?.focus({ preventScroll: true });
+  }
+  return true;
 }
 
 app.addEventListener("click", event => {
@@ -564,6 +632,7 @@ app.addEventListener("click", event => {
   if (!button) return;
   const key = activeKey();
   const view = toolView(key);
+  if (key === "edit" && handlePageEditorButton(button, view)) return;
   const { group, planned, mode, value, file, fileAction, page, thumbStep, previewStep } = button.dataset;
   if (group) {
     view.group = group;
@@ -626,7 +695,7 @@ app.addEventListener("click", event => {
 });
 
 app.addEventListener("dragstart", event => {
-  const handle = event.target.closest(".grip");
+  const handle = event.target.closest(".grip, .edit-grip");
   if (!handle) return;
   const view = toolView(activeKey());
   if (view.loading || view.busy) {
@@ -634,11 +703,14 @@ app.addEventListener("dragstart", event => {
     return;
   }
   event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData(dragType, handle.closest("[data-file-row]").dataset.fileRow);
+  const page = handle.closest("[data-edit-page]");
+  if (page) event.dataTransfer.setData(pageDragType, page.dataset.editPage);
+  else event.dataTransfer.setData(dragType, handle.closest("[data-file-row]").dataset.fileRow);
 });
 
 app.addEventListener("dragover", event => {
   const row = event.target.closest("[data-file-row]");
+  const page = event.target.closest("[data-edit-page]");
   const zone = event.target.closest("[data-upload]");
   const view = toolView(activeKey());
   if (view.loading || view.busy) return;
@@ -648,6 +720,12 @@ app.addEventListener("dragover", event => {
     app.querySelector(".is-target")?.classList.remove("is-target");
     row.classList.add("is-target");
   }
+  if (page && event.dataTransfer.types.includes(pageDragType)) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    app.querySelector(".edit-drop-target")?.classList.remove("edit-drop-target");
+    page.classList.add("edit-drop-target");
+  }
   if (zone && event.dataTransfer.types.includes("Files")) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
@@ -656,11 +734,13 @@ app.addEventListener("dragover", event => {
 });
 
 app.addEventListener("dragleave", event => {
-  const target = event.target.closest(".is-target, .over");
-  if (target && !target.contains(event.relatedTarget)) target.classList.remove("is-target", "over");
+  const target = event.target.closest(".is-target, .edit-drop-target, .over");
+  if (target && !target.contains(event.relatedTarget)) target.classList.remove("is-target", "edit-drop-target", "over");
 });
 
-app.addEventListener("dragend", () => app.querySelector(".is-target")?.classList.remove("is-target"));
+app.addEventListener("dragend", () => {
+  app.querySelector(".is-target, .edit-drop-target")?.classList.remove("is-target", "edit-drop-target");
+});
 
 document.addEventListener("dragover", event => {
   if (event.dataTransfer.types.includes("Files")) event.preventDefault();
@@ -668,6 +748,7 @@ document.addEventListener("dragover", event => {
 
 document.addEventListener("drop", event => {
   const row = event.target.closest("[data-file-row]");
+  const page = event.target.closest("[data-edit-page]");
   const zone = event.target.closest("[data-upload]");
   const key = activeKey();
   const view = toolView(key);
@@ -681,6 +762,14 @@ document.addEventListener("drop", event => {
     row.classList.remove("is-target");
     if (!view.loading && !view.busy) {
       moveFile(view, Number(event.dataTransfer.getData(dragType)), view.files.findIndex(file => file.id === Number(row.dataset.fileRow)));
+    }
+  }
+  if (key === "edit" && page && event.dataTransfer.types.includes(pageDragType)) {
+    event.preventDefault();
+    page.classList.remove("edit-drop-target");
+    if (!view.loading && !view.busy && moveEditedPage(view,
+      Number(event.dataTransfer.getData(pageDragType)), Number(page.dataset.editPage))) {
+      renderPageEdits(view);
     }
   }
 });

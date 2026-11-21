@@ -1,5 +1,8 @@
 import { zipSync } from "fflate";
-import { degrees, EncryptedPDFError, PageSizes, PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFString } from "pdf-lib";
+import {
+  AnnotationFlags, degrees, EncryptedPDFError, PageSizes, PDFArray, PDFCheckBox, PDFDict, PDFDocument,
+  PDFHexString, PDFName, PDFNumber, PDFRadioGroup, PDFRef, PDFStream, PDFString,
+} from "pdf-lib";
 
 const pdfType = "application/pdf";
 const zipType = "application/zip";
@@ -52,6 +55,7 @@ function resolvePages(pages, document) {
 async function appendPages(output, source, indices) {
   const pages = await output.copyPages(source, indices);
   for (const page of pages) output.addPage(page);
+  return pages;
 }
 
 async function pdfResult(document, options = {}) {
@@ -96,9 +100,142 @@ function hasDigitalSignature(document) {
   }
 }
 
+function* pageAnnotations(pages) {
+  for (const page of pages) {
+    const entries = page.node.lookup(PDFName.of("Annots"));
+    if (!(entries instanceof PDFArray)) continue;
+    for (let index = entries.size() - 1; index >= 0; index--) {
+      yield { page, entries, index, annotation: entries.lookup(index) };
+    }
+  }
+}
+
+function isWidget(annotation) {
+  return annotation instanceof PDFDict && annotation.lookup(PDFName.of("Subtype")) === PDFName.of("Widget");
+}
+
+function widgetAppearance(field, widget) {
+  // pdf-lib selects a button's appearance from the field value. The viewer uses the widget's state.
+  let reference = widget.getNormalAppearance();
+  if (reference instanceof PDFDict && (field instanceof PDFCheckBox || field instanceof PDFRadioGroup)) {
+    const state = widget.getAppearanceState();
+    const active = reference.get(field.acroField.getValue()) ?? reference.get(PDFName.of("Off"));
+    if (state && reference.get(state) === active) reference = active;
+  }
+  if (!(reference instanceof PDFRef)) throw new Error("Cannot resolve the widget's active appearance.");
+  return widget.dict.context.lookup(reference, PDFStream);
+}
+
+function checkWidgetAppearance(field, widget) {
+  const displayFlags = AnnotationFlags.Hidden | AnnotationFlags.NoView | AnnotationFlags.ToggleNoView
+    | AnnotationFlags.NoZoom | AnnotationFlags.NoRotate;
+  if (widget.hasFlag(displayFlags) || widget.dict.has(PDFName.of("OC"))) {
+    throw new Error("The widget's display rules cannot be applied to a page stream.");
+  }
+
+  const appearance = widgetAppearance(field, widget);
+  const { x, y, width, height } = appearance.dict.lookup(PDFName.of("BBox"), PDFArray).asRectangle();
+  const matrix = appearance.dict.lookupMaybe(PDFName.of("Matrix"), PDFArray);
+  if (matrix && matrix.size() !== 6) throw new Error("Invalid widget appearance matrix.");
+  const [a, b, c, d, e, f] = matrix
+    ? Array.from({ length: 6 }, (_, index) => matrix.lookup(index, PDFNumber).asNumber())
+    : [1, 0, 0, 1, 0, 0];
+  const corners = [[x, y], [x + width, y], [x, y + height], [x + width, y + height]];
+  const xs = corners.map(([px, py]) => a * px + c * py + e);
+  const ys = corners.map(([px, py]) => b * px + d * py + f);
+  const rectangle = widget.getRectangle();
+  // Flattening translates the appearance to the widget origin without fitting its bounds.
+  const bounds = [Math.min(...xs), Math.min(...ys), Math.max(...xs) - rectangle.width, Math.max(...ys) - rectangle.height];
+  if (width <= 0 || height <= 0 || rectangle.width <= 0 || rectangle.height <= 0
+    || !bounds.every(coordinate => Math.abs(coordinate) < 0.00001)) {
+    throw new Error("The transformed widget appearance does not match its rectangle.");
+  }
+}
+
+function hasInternalDestination(annotation) {
+  if (!(annotation instanceof PDFDict)) return false;
+  const action = annotation.lookup(PDFName.of("A"));
+  return annotation.has(PDFName.of("Dest"))
+    || (action instanceof PDFDict && action.lookup(PDFName.of("S")) === PDFName.of("GoTo"));
+}
+
 export async function inspectPdf(file) {
   const document = await loadPdf(file);
-  return { pageCount: document.getPageCount(), hasDigitalSignature: hasDigitalSignature(document) };
+  const form = document.catalog.lookup(PDFName.of("AcroForm"));
+  const fields = form instanceof PDFDict ? form.lookup(PDFName.of("Fields")) : undefined;
+  const outlines = document.catalog.lookup(PDFName.of("Outlines"));
+  let hasFormFields = (fields instanceof PDFArray && fields.size() > 0) || (form instanceof PDFDict && form.has(PDFName.of("XFA")));
+  let hasInternalLinks = false;
+  for (const { annotation } of pageAnnotations(document.getPages())) {
+    hasFormFields ||= isWidget(annotation);
+    hasInternalLinks ||= hasInternalDestination(annotation);
+    if (hasFormFields && hasInternalLinks) break;
+  }
+  return {
+    pageCount: document.getPageCount(),
+    hasDigitalSignature: hasDigitalSignature(document),
+    hasFormFields,
+    hasOutlines: outlines instanceof PDFDict && outlines.has(PDFName.of("First")),
+    hasInternalLinks,
+  };
+}
+
+export async function editPdf(file, edits) {
+  if (!Array.isArray(edits) || edits.length === 0) throw new Error("Çıktıda en az bir sayfa kalmalı.");
+  if (edits.some(edit => !edit || !Number.isSafeInteger(edit.rotation) || edit.rotation % 90 !== 0)) {
+    throw new Error("Geçerli bir sayfa ve dönüş açısı seçin.");
+  }
+
+  const source = await loadPdf(file);
+  const form = source.catalog.lookup(PDFName.of("AcroForm"));
+  if (form instanceof PDFDict && form.has(PDFName.of("XFA"))) {
+    throw new Error("Bu PDF’deki XFA formunun görünümü düzenleme sırasında korunamıyor.");
+  }
+  const indices = resolvePages(edits.map(edit => edit.pageNumber), source);
+  if (new Set(indices).size !== indices.length) throw new Error("Her sayfa çıktıda yalnızca bir kez yer alabilir.");
+  const sourcePages = source.getPages();
+  const selectedPages = indices.map(index => sourcePages[index]);
+  const retainedWidgets = new Set();
+  for (const { annotation } of pageAnnotations(selectedPages)) {
+    if (isWidget(annotation)) retainedWidgets.add(annotation);
+  }
+  if (retainedWidgets.size) {
+    try {
+      const pdfForm = source.getForm();
+      for (const field of pdfForm.getFields()) {
+        for (const widget of field.acroField.getWidgets()) {
+          if (retainedWidgets.delete(widget.dict)) checkWidgetAppearance(field, widget);
+        }
+      }
+      if (retainedWidgets.size) throw new Error("The page contains widgets with no form field.");
+      pdfForm.flatten({ updateFieldAppearances: false });
+      for (const { annotation } of pageAnnotations(selectedPages)) {
+        if (isWidget(annotation)) throw new Error("A form widget was not flattened.");
+      }
+    } catch (error) {
+      throw new Error("Bu PDF’deki form alanlarının görünümü güvenli biçimde kopyalanamadı.", { cause: error });
+    }
+  }
+
+  // Local links can copy detached source pages into the result through their destinations.
+  for (const { entries, index, annotation } of pageAnnotations(selectedPages)) {
+    if (!(annotation instanceof PDFDict) || hasInternalDestination(annotation)) entries.remove(index);
+    else annotation.delete(PDFName.of("P"));
+  }
+
+  const output = await PDFDocument.create();
+  const pages = await appendPages(output, source, indices);
+  for (const [index, page] of pages.entries()) {
+    const delta = edits[index].rotation % 360;
+    if (delta === 0) continue;
+    const current = page.getRotation().angle;
+    const base = current % 90 === 0 ? current % 360 : 0;
+    page.setRotation(degrees(((base + delta) % 360 + 360) % 360));
+  }
+  for (const { page, annotation } of pageAnnotations(pages)) {
+    annotation.set(PDFName.of("P"), page.ref);
+  }
+  return pdfResult(output);
 }
 
 export async function mergePdfs(files) {

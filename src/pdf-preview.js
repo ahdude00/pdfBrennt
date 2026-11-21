@@ -31,31 +31,35 @@ export async function openPdfPreview(source) {
   let closePromise;
   return {
     pageCount: pdf.numPages,
-    async renderPage(pageNumber, canvas, { maxWidth = 360, maxHeight = 480 } = {}) {
-      if (closePromise) return false;
+    async renderPage(pageNumber, canvas, { maxWidth = 360, maxHeight = 480, rotationDelta = 0, signal } = {}) {
+      if (closePromise || signal?.aborted) return false;
       const previous = renders.get(canvas);
       const current = {};
       renders.set(canvas, current);
       previous?.task?.cancel();
+      const cancel = () => current.task?.cancel();
+      signal?.addEventListener("abort", cancel, { once: true });
 
       try {
         const page = await pdf.getPage(pageNumber);
         await previous?.task?.promise.catch(() => {});
-        if (closePromise || renders.get(canvas) !== current) return false;
+        if (closePromise || signal?.aborted || renders.get(canvas) !== current) return false;
 
-        const original = page.getViewport({ scale: 1 });
+        const rotation = (page.rotate + rotationDelta + 360) % 360;
+        const original = page.getViewport({ scale: 1, rotation });
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         const scale = pixelRatio * Math.min(maxWidth / original.width, maxHeight / original.height);
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale, rotation });
         canvas.width = Math.max(1, Math.ceil(viewport.width));
         canvas.height = Math.max(1, Math.ceil(viewport.height));
         current.task = page.render({ canvas, viewport });
         await current.task.promise;
         return true;
       } catch (error) {
-        if (closePromise || renders.get(canvas) !== current) return false;
+        if (closePromise || signal?.aborted || renders.get(canvas) !== current) return false;
         throw new Error("Sayfa önizlemesi oluşturulamadı.", { cause: error });
       } finally {
+        signal?.removeEventListener("abort", cancel);
         if (renders.get(canvas) === current) renders.delete(canvas);
       }
     },
