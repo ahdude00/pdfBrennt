@@ -1,6 +1,6 @@
 import { zipSync } from "fflate";
 import {
-  AnnotationFlags, degrees, EncryptedPDFError, PageSizes, PDFArray, PDFCheckBox, PDFDict, PDFDocument,
+  AnnotationFlags, degrees, drawImage, EncryptedPDFError, PageSizes, PDFArray, PDFCheckBox, PDFDict, PDFDocument,
   PDFHexString, PDFName, PDFNumber, PDFRadioGroup, PDFRef, PDFStream, PDFString,
 } from "pdf-lib";
 
@@ -9,6 +9,8 @@ const zipType = "application/zip";
 const encryptedPdfMessage = new EncryptedPDFError().message;
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const exifSignature = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00];
+// Classic TIFF and BigTIFF, little and big endian. BigTIFF is recognised so it can be refused by name.
+const tiffSignatures = [[0x49, 0x49, 0x2a, 0x00], [0x4d, 0x4d, 0x00, 0x2a], [0x49, 0x49, 0x2b, 0x00], [0x4d, 0x4d, 0x00, 0x2b]];
 
 // Offsets are fractions of the oriented image's width and height.
 const exifPlacement = {
@@ -359,11 +361,12 @@ function pngDefaultImage(bytes) {
   throw new Error("Geçersiz PNG parça yapısı.");
 }
 
-function addImagePage(document, image, orientation, size) {
+// `natural` is the unrotated image size in points. `draw` places the image with pdf-lib's drawImage options.
+function addImagePage(document, natural, orientation, size, draw) {
   const { rotation, flipX, flipY, offsetX = 0, offsetY = 0 } = exifPlacement[orientation];
   const quarterTurn = Math.abs(rotation) === 90;
-  const width = quarterTurn ? image.height : image.width;
-  const height = quarterTurn ? image.width : image.height;
+  const width = quarterTurn ? natural.height : natural.width;
+  const height = quarterTurn ? natural.width : natural.height;
   let scale = Math.min(1, 14400 / width, 14400 / height);
   let pageWidth = width * scale;
   let pageHeight = height * scale;
@@ -378,31 +381,85 @@ function addImagePage(document, image, orientation, size) {
   const drawnWidth = width * scale;
   const drawnHeight = height * scale;
   const page = document.addPage([pageWidth, pageHeight]);
-  page.drawImage(image, {
+  draw(page, {
     x: (pageWidth - drawnWidth) / 2 + offsetX * drawnWidth,
     y: (pageHeight - drawnHeight) / 2 + offsetY * drawnHeight,
-    width: image.width * scale * (flipX ? -1 : 1),
-    height: image.height * scale * (flipY ? -1 : 1),
+    width: natural.width * scale * (flipX ? -1 : 1),
+    height: natural.height * scale * (flipY ? -1 : 1),
     rotate: degrees(rotation),
   });
 }
 
+function isTiff(bytes) {
+  return tiffSignatures.some(signature => matchesAt(bytes, signature));
+}
+
+async function openTiff(file, buffer) {
+  const engine = await import("./tiff-engine.js");
+  try {
+    return { ...engine, tiff: engine.readTiff(buffer) };
+  } catch (error) {
+    throw tiffFailure(file, error, engine.TiffError);
+  }
+}
+
+function tiffFailure(file, error, TiffError) {
+  const reason = error instanceof TiffError ? error.message : "Sağlam bir TIFF dosyası seçin.";
+  return new Error(`${file.name} açılamadı. ${reason}`, { cause: error });
+}
+
+export async function inspectTiff(file) {
+  const buffer = await file.arrayBuffer();
+  if (!isTiff(new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength)))) {
+    throw new Error(`${file.name} bir TIFF dosyası değil.`);
+  }
+  const { tiff } = await openTiff(file, buffer);
+  return { pageCount: tiff.pages.length };
+}
+
+async function addTiffPages(output, file, buffer, size, warnings) {
+  const { tiff, TiffError, embedTiffPage } = await openTiff(file, buffer);
+  let sixteenBit = false;
+  let cmyk = false;
+  for (let index = 0; index < tiff.pages.length; index += 1) {
+    let page;
+    try {
+      page = embedTiffPage(output, tiff, index);
+    } catch (error) {
+      throw tiffFailure(file, error, TiffError);
+    }
+    sixteenBit ||= page.sixteenBit;
+    cmyk ||= page.cmyk;
+    addImagePage(output, page.natural, page.orientation, size, (target, options) => {
+      const name = target.node.newXObject("Image", page.ref);
+      target.pushOperators(...drawImage(name, { ...options, xSkew: degrees(0), ySkew: degrees(0) }));
+    });
+  }
+  if (sixteenBit) warnings.push(`${file.name} için 16 bit renk derinliği PDF’de 8 bite düşürüldü.`);
+  if (cmyk) warnings.push(`${file.name} CMYK renkleri RGB’ye çevrildi. Renkler baskıda biraz farklı görünebilir.`);
+}
+
 export async function imagesToPdf(files, { size = "original" } = {}) {
-  if (files.length === 0) throw new Error("En az bir PNG veya JPEG dosyası seçin.");
+  if (files.length === 0) throw new Error("En az bir PNG, JPEG veya TIFF dosyası seçin.");
   if (size !== "original" && size !== "a4") throw new Error("Geçerli bir sayfa boyutu seçin.");
 
   const output = await PDFDocument.create();
   const warnings = [];
   for (const file of files) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    if (isTiff(bytes)) {
+      await addTiffPages(output, file, buffer, size, warnings);
+      continue;
+    }
     const png = matchesAt(bytes, pngSignature);
     const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-    if (!png && !jpeg) throw new Error(`${file.name} desteklenmiyor. PNG veya JPEG seçin.`);
+    if (!png && !jpeg) throw new Error(`${file.name} desteklenmiyor. PNG, JPEG veya TIFF seçin.`);
     try {
       const imageBytes = png ? pngDefaultImage(bytes) : bytes;
       const image = png ? await output.embedPng(imageBytes) : await output.embedJpg(imageBytes);
       if (image.width < 1 || image.height < 1) throw new Error("Geçersiz görsel boyutu.");
-      addImagePage(output, image, jpeg ? jpegOrientation(bytes) : 1, size);
+      addImagePage(output, image, jpeg ? jpegOrientation(bytes) : 1, size, (page, options) => page.drawImage(image, options));
       if (imageBytes !== bytes) {
         warnings.push(`${file.name} için animasyonun varsayılan karesi PDF’ye eklendi.`);
       }

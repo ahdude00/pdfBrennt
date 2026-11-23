@@ -238,12 +238,12 @@ export function convertScreen(view) {
   const udf = view.kind === "udf";
   const active = udf ? view.udf : view;
   const source = `<div class="mode-options" role="group" aria-label="Dosya türü">
-      ${modeButton("convert", "image", "PNG / JPEG", view.kind)}
+      ${modeButton("convert", "image", "PNG / JPEG / TIFF", view.kind)}
       ${modeButton("convert", "office", "Word / Excel / PowerPoint", view.kind)}
       ${modeButton("convert", "udf", "UYAP (UDF)", view.kind)}
     </div>
     ${image ? `
-      ${uploadZone("convert-input", "Görselleri seç", "PNG veya JPEG dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,image/png,image/jpeg", true)}
+      ${uploadZone("convert-input", "Görselleri seç", "PNG, JPEG veya TIFF dosyalarını seçin ya da buraya sürükleyin.", ".png,.jpg,.jpeg,.tif,.tiff,image/png,image/jpeg,image/tiff", true)}
       ${view.files.length ? `<ol class="file-list">${view.files.map((file, index) => sortableRow(file, index, view)).join("")}</ol>` : ""}
       ` : udf ? `
         <p class="notice udf-notice">${icon("info", 18)}<span>Satır ve sayfa düzeni UYAP Editör’ün PDF çıktısıyla aynı kalır. Tablo, görsel, üstbilgi, altbilgi, sayfa numarası, liste, sekme, vurgu ve yatay sayfa desteklenir. Henüz birebir çizilemeyen öğeler içeren belgeler, eksik çıktı vermek yerine nedeni belirtilerek reddedilir; bu belgeler için aşağıdaki UYAP köprüsünü kullanabilirsiniz.</span></p>
@@ -252,7 +252,7 @@ export function convertScreen(view) {
         ${view.udf.files.length && view.udf.files.every(file => file.bridgeOnly) ? "" : udfFontSettings(view.udf)}
       ` : convertHelp()}`;
   const description = image
-    ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel bir PDF sayfası olur."
+    ? "Görselleri cihazınızda PDF’ye dönüştürün. Her görsel, çok sayfalı TIFF’lerde her sayfa bir PDF sayfası olur."
     : udf ? "UYAP belgelerini cihazınızda PDF’ye dönüştürün. Birden çok belgeyi ayrı PDF’lere ya da tek PDF’ye çevirebilirsiniz."
     : "Office belgelerini PDF olarak dışa aktarma seçeneklerini görün.";
   return `${toolHeader("donustur", description)}
@@ -267,13 +267,13 @@ export function convertScreen(view) {
       </section>
       ${image ? `<aside class="panel summary" aria-labelledby="preview-heading">
         <h2 id="preview-heading">PDF ayarları</h2>
-        <dl><div><dt>Çıktıdaki sayfa sayısı</dt><dd>${view.files.length} sayfa</dd></div></dl>
+        <dl><div><dt>Çıktıdaki sayfa sayısı</dt><dd>${view.files.reduce((count, file) => count + (file.pages ?? 1), 0)} sayfa</dd></div></dl>
         <label class="field-label" for="image-size">Sayfa boyutu</label>
         <select class="control image-size" id="image-size" ${view.busy ? "disabled" : ""}>
           <option value="original" ${view.size === "original" ? "selected" : ""}>Görsel boyutu</option>
           <option value="a4" ${view.size === "a4" ? "selected" : ""}>A4 · Sayfaya sığdır</option>
         </select>
-        <p class="context-note">${icon("info", 15)} Görselin oranı korunur. Boyut seçimi piksel sayısını değiştirmez.</p>
+        <p class="context-note">${icon("info", 15)} Görselin oranı korunur. Boyut seçimi piksel sayısını değiştirmez. TIFF’ler taranma çözünürlüğüne (DPI) göre boyutlanır.</p>
         ${actionButton("convert", "PDF’ye dönüştür", view)}
         ${privacyNote()}
       </aside>` : udf ? `<aside class="panel summary" aria-labelledby="preview-heading">

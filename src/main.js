@@ -242,6 +242,7 @@ function fileFormat(file, key) {
   if (key !== "convert") return /\.pdf$/i.test(file.name) || file.type === "application/pdf" ? "PDF" : "";
   if (/\.png$/i.test(file.name) || file.type === "image/png") return "PNG";
   if (/\.jpe?g$/i.test(file.name) || file.type === "image/jpeg") return "JPEG";
+  if (/\.tiff?$/i.test(file.name) || file.type === "image/tiff") return "TIFF";
   return "";
 }
 
@@ -267,7 +268,7 @@ async function loadFiles(key, files) {
       const format = fileFormat(file, udf ? "udf" : key);
       try {
         if (!format) {
-          const supported = udf ? "UDF" : key === "convert" ? "PNG veya JPEG" : "PDF";
+          const supported = udf ? "UDF" : key === "convert" ? "PNG, JPEG veya TIFF" : "PDF";
           throw new Error(`${supported} dosyası seçin.`);
         }
         if (!file.size) throw new Error("Dosya boş.");
@@ -287,6 +288,10 @@ async function loadFiles(key, files) {
               attachment.kind = `${attachment.kind} · yalnızca UYAP köprüsüyle`;
               errors.push(`${file.name} · ${error?.message || "Tarayıcı bu belgeyi açamadı."} “UYAP köprüsüyle dönüştür”ü deneyin.`);
             }
+          } else if (format === "TIFF") {
+            const { pageCount } = await runPdfOperation("inspectTiff", file);
+            attachment.pages = pageCount;
+            if (pageCount > 1) attachment.kind = `${attachment.kind} · ${pageCount} sayfa`;
           }
           view.files.push(attachment);
         } else {

@@ -26,7 +26,7 @@ const icons = {
 };
 
 export const catalog = [
-  { id: "donustur", label: "PDF’ye Dönüştür", icon: "convert", color: "teal", group: "Dönüştür", detail: "PNG, JPEG ve UYAP (UDF) belgelerinden PDF oluşturun.", keywords: "word powerpoint excel docx pptx xlsx jpg udf uyap converter", status: "Office · Yakında" },
+  { id: "donustur", label: "PDF’ye Dönüştür", icon: "convert", color: "teal", group: "Dönüştür", detail: "PNG, JPEG, TIFF ve UYAP (UDF) belgelerinden PDF oluşturun.", keywords: "word powerpoint excel docx pptx xlsx jpg tif tiff faks tarama udf uyap converter", status: "Office · Yakında" },
   { id: "birlestir", label: "PDF Birleştir", icon: "merge", color: "blue", group: "Düzenle", detail: "PDF’leri sıralayın, her dosyadan istediğiniz sayfaları alın." },
   { id: "ayir", label: "PDF Ayır", icon: "split", color: "violet", group: "Düzenle", detail: "Bir PDF’yi parçalara ayırın veya seçtiğiniz sayfaları çıkarın." },
   { id: "sikistir", label: "PDF Sıkıştır", icon: "compress", color: "amber", group: "Düzenle", detail: "PDF boyutunu küçültün ve çıktı kalitesini seçin.", plan: "Çıktı kalitesini bir önizlemede değerlendirin. İndirmeden önce sayfa sayısını ve dosya boyutunu karşılaştırın." },

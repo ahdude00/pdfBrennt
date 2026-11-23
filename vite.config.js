@@ -3,6 +3,9 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   base: "./",
+  // The TIFF decoder is only reached through a dynamic import in the worker. Pre-bundle it so the
+  // dev server does not reload the page the first time a TIFF is opened.
+  optimizeDeps: { include: ["utif"] },
   plugins: [
     viteStaticCopy({
       targets: [
@@ -15,7 +18,7 @@ export default defineConfig({
           rename: { stripBase: 2 },
         },
         {
-          src: "node_modules/{fflate,pdf-lib,@pdf-lib/standard-fonts,@pdf-lib/upng,pako,tslib}/LICENSE*",
+          src: "node_modules/{fflate,pdf-lib,@pdf-lib/standard-fonts,@pdf-lib/upng,pako,tslib,utif}/LICENSE*",
           dest: "licenses",
           rename: { stripBase: 1 },
         },
